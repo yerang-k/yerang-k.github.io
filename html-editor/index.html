@@ -167,7 +167,7 @@ footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#
   <aside id="panel"></aside>
 </main>
 <div id="tl"></div>
-<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.22 (2026-11-05)</footer>
+<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.23 (2026-11-05)</footer>
 <div id="toast"></div>
 <input type="file" id="fileIn" accept=".html,.htm" hidden>
 <input type="file" id="imgIn" accept="image/*" hidden>
@@ -405,7 +405,11 @@ function scanPage() {  // 지금 화면에 보이는 글자(sig), 제목(가장 
 }
 async function quietScan(max = 1500, step = 220) {  // 화면이 잠잠해질 때까지 기다렸다가 읽는다
   let a = scanPage();
-  for (const t0 = performance.now(); performance.now() - t0 < max;) { await sleep(step); const b = scanPage(); if (b.sig === a.sig) return b; a = b; }
+  for (const t0 = performance.now(); performance.now() - t0 < max;) {
+    await sleep(step); const b = scanPage();
+    if (b.sig === a.sig && (b.title || performance.now() - t0 > max * 0.6)) return b;  // 제목이 아직 안 보이면(서서히 나타나는 중) 조금 더 기다린다
+    a = b;
+  }
   return a;
 }
 function sendKey(k) {
