@@ -167,7 +167,7 @@ footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#
   <aside id="panel"></aside>
 </main>
 <div id="tl"></div>
-<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.27 (2026-11-05)</footer>
+<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.28 (2026-11-05)</footer>
 <div id="toast"></div>
 <input type="file" id="fileIn" accept=".html,.htm" hidden>
 <input type="file" id="imgIn" accept="image/*" hidden>
@@ -479,7 +479,7 @@ function fitAll() {
   const els = slideEls(); if (!els || els.length < 2) return toast('슬라이드를 찾지 못해서 맞출 수 없어요');
   const sel = commonSelector(els); if (!sel) return toast('이 파일은 슬라이드를 한꺼번에 고를 수 없는 구조예요');
   let st = doc.getElementById('hs-uniform'); if (!st) { st = doc.createElement('style'); st.id = 'hs-uniform'; doc.head.appendChild(st); }
-  const set = px => { st.textContent = `${sel}{font-size:${px}px!important}`; return els.map(x => x.scrollHeight).join(); };
+  const set = px => { st.textContent = `${sel}{font-size:${px}px!important}`; return els.map(x => Math.round([...x.children].reduce((t, c) => t + c.getBoundingClientRect().height, 0))).join(); };  // 안쪽 내용의 실제 높이 (슬라이드가 화면보다 낮아도 글자 크기에 따라 바뀌는지 본다)
   const h1 = set(10), h2 = set(40);
   if (h1 === h2) { st.textContent = uniform ? uniform.rule : ''; return toast('이 파일은 슬라이드 글자 크기를 한꺼번에 바꿀 수 없는 구조예요 (글자가 em 단위가 아니에요)'); }
   const bad = px => { set(px); return els.map((x, i) => slideFits(x) ? 0 : i + 1).filter(Boolean); };
