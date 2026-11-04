@@ -72,6 +72,8 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 #tree .sg button{min-width:28px;padding:3px 0;font-size:12px}
 #tree .sg button.on{background:#d8c3a5;color:#111;border-color:#d8c3a5}
 #tree .hn{color:#888;margin-left:6px}
+#tree .gp{display:block;padding:0 10px 8px;font-size:12px}
+#tree .gp select{width:100%;margin-top:4px;background:#2c2c30;color:#eee;border:1px solid #444;border-radius:6px;padding:3px}
 #tree .trw{display:flex;align-items:stretch}
 #tree .trw .tr{flex:1;min-width:0}
 #tree .ar{flex:none;width:20px;padding:0;border:0;border-radius:0;background:none;color:#aaa;cursor:pointer;text-align:center}
@@ -120,7 +122,7 @@ footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#
   <aside id="panel"></aside>
 </main>
 <div id="tl"></div>
-<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.9 (2026-11-04)</footer>
+<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.10 (2026-11-04)</footer>
 <div id="toast"></div>
 <input type="file" id="fileIn" accept=".html,.htm" hidden>
 <input type="file" id="imgIn" accept="image/*" hidden>
@@ -246,11 +248,11 @@ const SKIP = /^(SCRIPT|STYLE|LINK|META|NOSCRIPT|TEMPLATE|HEAD)$/, MAXT = 1500;
 let slideDisp = 'block', slideIdx = 0, slideName = '화면';
 const isOn = c => { const s = doc.defaultView.getComputedStyle(c); return s.display !== 'none' && s.visibility !== 'hidden'; };  // hidden 속성은 이미 display:none 으로 계산돼 있다
 const isShown = c => isOn(c) && +doc.defaultView.getComputedStyle(c).opacity > 0.05;
+let cands = [], groupIdx = 0, lastDetect = 0, mo = null, moT = 0;
 function detectSlides() {
-  slides = []; slideCls = '';
+  slides = []; slideCls = ''; cands = []; groupIdx = 0; lastDetect = Date.now();
   if (!doc || !doc.body) return;
   const NAMEY = /slide|screen|view|page|step|scene|tab|pane|stage|section/i;
-  let best = null;
   for (const p of [doc.body, ...doc.body.querySelectorAll('*')]) {
     const kids = [...p.children].filter(c => !SKIP.test(c.tagName));
     if (kids.length < 2 || kids.length > 300) continue;
@@ -268,26 +270,52 @@ function detectSlides() {
       let shown = k.filter(isOn);  // 등장 모션 때문에 막 열린 장면은 잠깐 투명하므로, 먼저 display 로만 세고 여럿이면 그때 투명도로 가른다
       if (shown.length > 1) shown = shown.filter(isShown);
       if (shown.length !== 1) continue;
-      const score = k.length + (namey ? 6 : 0) + (p === doc.body ? 2 : 0);
-      if (!best || score > best.score) best = { k, name, score, sh: shown[0] };
+      cands.push({ k, name, score: k.length + (namey ? 6 : 0) + (p === doc.body ? 2 : 0), sh: shown[0] });
     }
   }
-  if (!best) return;
-  slides = best.k;
+  cands.sort((a, b) => b.score - a.score);
+  // 같은 구성원이 클래스 가족·id 가족으로 겹쳐 잡히면 하나만 남긴다
+  cands = cands.filter((c, i) => !cands.slice(0, i).some(o => o.k.length === c.k.length && o.k.every((x, j) => x === c.k[j]))).slice(0, 8);
+  if (cands.length) applyGroup(cands[0]);
+}
+function applyGroup(best) {
+  clearSlideAttrs();
+  slides = best.k; slideCls = '';
+  const sh = slides.find(isOn) || best.sh;
   slideName = /slide/i.test(best.name + best.k[0].className) ? '슬라이드' : '화면';
-  slideDisp = doc.defaultView.getComputedStyle(best.sh).display;
-  slideIdx = slides.indexOf(best.sh);
+  slideDisp = doc.defaultView.getComputedStyle(sh).display;
+  slideIdx = slides.indexOf(sh);
   // 클래스 방식 확인: 후보 클래스를 다른 구성원에 옮겨 보고 정말 보이고 숨겨지는지 시험한다 (바로 되돌림)
-  const other = slides.find(x => x !== best.sh);
-  for (const c of [...best.sh.classList]) {
+  const other = slides.find(x => x !== sh);
+  for (const c of [...sh.classList]) {
     if (slides.filter(x => x.classList.contains(c)).length !== 1) continue;
-    best.sh.classList.remove(c); other.classList.add(c);
-    const ok = isOn(other) && !isOn(best.sh);
-    other.classList.remove(c); best.sh.classList.add(c);
+    sh.classList.remove(c); other.classList.add(c);
+    const ok = isOn(other) && !isOn(sh);
+    other.classList.remove(c); sh.classList.add(c);
     if (ok) { slideCls = c; break; }
   }
   let st = doc.getElementById('hs-slides'); if (!st) { st = doc.createElement('style'); st.id = 'hs-slides'; doc.head.appendChild(st); }
   st.textContent = `[data-hs-off]{display:none!important}[data-hs-on]{display:${slideDisp}!important;visibility:visible!important;opacity:1!important}`;
+}
+// 앱이 화면을 다시 그리면(요소를 새로 만들면) 우리가 쥐고 있던 슬라이드 목록은 낡은 것이 된다 → 다시 찾는다
+const slidesStale = () => slides.length > 0 && slides.some(x => !x.isConnected);
+function watchDom() {
+  if (mo) mo.disconnect();
+  mo = new MutationObserver(recs => {
+    if (!recs.some(r => [...r.addedNodes, ...r.removedNodes].some(n => n.nodeType === 1))) return;
+    clearTimeout(moT);
+    moT = setTimeout(() => {
+      if (!doc) return;
+      if (slidesStale() || (!slides.length && Date.now() - lastDetect > 1500)) { detectSlides(); renderTree(); }
+    }, 400);
+  });
+  mo.observe(doc.body, { childList: true, subtree: true });
+}
+function viewable(el) {  // 그 요소가 실제로 화면에 보이고 다른 것에 가려지지 않았는지
+  const r = el.getBoundingClientRect(), W = doc.documentElement.clientWidth, H = doc.documentElement.clientHeight;
+  if (r.width < 2 || r.height < 2 || r.right < 0 || r.bottom < 0 || r.left > W || r.top > H) return false;
+  const t = doc.elementFromPoint(Math.min(Math.max(r.left + r.width / 2, 0), W - 1), Math.min(Math.max(r.top + r.height / 2, 0), H - 1));
+  return !!t && (el.contains(t) || t.contains(el));
 }
 const curSlide = () => { const i = slides.findIndex(isShown); return i >= 0 ? i : Math.min(slideIdx, slides.length - 1); };
 function slideTitle(sl) {
@@ -296,6 +324,7 @@ function slideTitle(sl) {
 }
 function clearSlideAttrs() { doc && doc.querySelectorAll('[data-hs-on],[data-hs-off]').forEach(e => { e.removeAttribute('data-hs-on'); e.removeAttribute('data-hs-off'); }); }
 function showSlide(i) {
+  if (slidesStale()) { detectSlides(); fill(); }
   if (!slides.length) return;
   i = Math.max(0, Math.min(slides.length - 1, i));
   editing && editing.blur(); select(null);
@@ -307,6 +336,7 @@ function showSlide(i) {
   slideIdx = i;
   if (mpause) setTimeout(freezeMotion, 1200);
   upd(); fill();
+  setTimeout(() => { if (slides[i] && slides[i].isConnected && !viewable(slides[i])) toast('번호는 바꿨지만 화면에서는 안 보여요. 왼쪽의 "묶음" 목록에서 다른 묶음을 골라 보거나 ↻ 새로고침을 눌러 보세요'); }, 400);
 }
 function hover(el) {
   const H = $('hov'), r = el && el.isConnected ? el.getBoundingClientRect() : null;
@@ -323,6 +353,10 @@ function renderTree() {
     T.insertAdjacentHTML('beforeend', `<h4>${slideName}</h4><div class="sl"><button id="slPrev" aria-label="이전">◀</button><b>${ci + 1} / ${slides.length}</b><button id="slNext" aria-label="다음">▶</button></div><div class="sg">${slides.map((sl, k) => `<button data-sl="${k}" class="${k === ci ? 'on' : ''}" title="${esc(slideTitle(sl))}">${k + 1}</button>`).join('')}</div>`);
     $('slPrev').onclick = () => showSlide(ci - 1); $('slNext').onclick = () => showSlide(ci + 1);
     T.querySelectorAll('[data-sl]').forEach(b => b.onclick = () => showSlide(+b.dataset.sl));
+    if (cands.length > 1) {
+      T.insertAdjacentHTML('beforeend', `<label class="gp">다른 묶음으로 보기<select id="slGroup">${cands.map((c, k) => `<option value="${k}" ${k === groupIdx ? 'selected' : ''}>${esc(c.name.replace(/^[.#*]+/, ''))} · ${c.k.length}개</option>`).join('')}</select></label>`);
+      $('slGroup').onchange = e => { groupIdx = +e.target.value; applyGroup(cands[groupIdx]); fill(); };
+    }
   }
   T.insertAdjacentHTML('beforeend', '<h4>구조 <button class="rf" id="trRefresh" title="앱 화면이 바뀌었거나 목록이 비어 있으면 눌러서 다시 읽어요">↻ 새로고침</button></h4>');
   $('trRefresh').onclick = () => { detectSlides(); fill(); toast(slides.length ? `${slideName} ${slides.length}개를 찾았어요` : '넘겨 볼 슬라이드·화면은 찾지 못했어요 (구조 목록은 새로 읽었어요)'); };
@@ -1010,7 +1044,7 @@ f.onload = () => {
   st.textContent = '*:hover{outline:1px dashed #3aa0ff!important}';
   doc.head.appendChild(st);
   if (mpause) setTimeout(freezeMotion, 400);
-  detectSlides();  // 멈춤을 켜 둔 채 새 파일을 열면 등장 모션이 끝난 뒤에 세운다
+  detectSlides(); watchDom();  // 멈춤을 켜 둔 채 새 파일을 열면 등장 모션이 끝난 뒤에 세운다
   const sk = doc.createElement('style'); sk.id = 'hs-kf'; sk.textContent = kfCss(); doc.head.appendChild(sk);  // 키프레임 수정본(원본 뒤에 와서 우선 적용)
   doc.addEventListener('click', e => {
     if (live) {  // 작동 모드: 앱의 버튼·탭이 그대로 동작. 다른 파일로 가는 링크만 막는다
