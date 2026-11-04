@@ -122,7 +122,7 @@ footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#
   <aside id="panel"></aside>
 </main>
 <div id="tl"></div>
-<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.11 (2026-11-04)</footer>
+<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.12 (2026-11-04)</footer>
 <div id="toast"></div>
 <input type="file" id="fileIn" accept=".html,.htm" hidden>
 <input type="file" id="imgIn" accept="image/*" hidden>
@@ -139,6 +139,7 @@ let ch = {};              // 선택자 -> {tx, ty, css:{}, html, src}
 let undo = [];
 let group = [];           // Shift+클릭으로 여러 개 고른 요소 (cur 포함, 2개 이상일 때만 사용)
 const G = () => group.length > 1 ? group : cur ? [cur] : [];
+let forceAttr = false;  // 이 묶음은 클래스로 안 넘어가서 편집기 임시 속성으로만 넘긴다
 let slides = [], slideCls = '';  // 슬라이드 모음(한 번에 하나만 보이는 형제들)과 "지금 보이는 것"을 표시하는 클래스
 let kf = {}, kName = '', kSel = 0, phPct = null, kdrag = null;  // 키프레임 수정본 / 선택한 애니메이션 이름 / 선택한 키프레임 / 재생헤드(%) / 끌기 상태
 let ptab = 'style', mpause = false, advOpen = false, seqOn = true;  // 패널 탭 / 모션 멈춤 / 고급(타임라인) 펼침 / 여러 개 차례대로  // 오른쪽 패널 탭 / 편집 중 모션 멈춤
@@ -280,7 +281,7 @@ function detectSlides() {
 }
 function applyGroup(best) {
   clearSlideAttrs();
-  slides = best.k; slideCls = '';
+  slides = best.k; slideCls = ''; forceAttr = false;
   const sh = slides.find(isOn) || best.sh;
   slideName = /slide/i.test(best.name + best.k[0].className) ? '슬라이드' : '화면';
   slideDisp = doc.defaultView.getComputedStyle(sh).display;
@@ -330,9 +331,14 @@ function showSlide(i) {
   i = Math.max(0, Math.min(slides.length - 1, i));
   editing && editing.blur(); select(null);
   const win = f.contentWindow;
-  if (slideCls) {
+  const viaClass = slideCls && !forceAttr;
+  if (viaClass) {
     if (typeof win.show === 'function' && String(win.show).includes(slideCls)) { try { win.show(i); } catch { } }  // 앱의 번호·진행 막대 등도 같이 바뀌게
     if (!slides[i].classList.contains(slideCls)) slides.forEach((s, k) => s.classList.toggle(slideCls, k === i));
+    // 앱이 자기 상태대로 클래스를 곧바로 되돌려 버리면(번호만 바뀌고 화면이 그대로) 편집기가 직접 보이고 숨기는 방식으로 바꾼다
+    setTimeout(() => {
+      if (slides[i] && slides[i].isConnected && slideIdx === i && (!isShown(slides[i]) || slides.some((s, k) => k !== i && isShown(s)))) { forceAttr = true; showSlide(i); }
+    }, 350);
   } else slides.forEach((s, k) => { s.toggleAttribute('data-hs-on', k === i); s.toggleAttribute('data-hs-off', k !== i); });
   slideIdx = i;
   if (mpause) setTimeout(freezeMotion, 1200);
