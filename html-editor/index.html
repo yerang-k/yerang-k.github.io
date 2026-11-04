@@ -72,6 +72,11 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 #tree .sg button{min-width:28px;padding:3px 0;font-size:12px}
 #tree .sg button.on{background:#d8c3a5;color:#111;border-color:#d8c3a5}
 #tree .hn{color:#888;margin-left:6px}
+#tree .trw{display:flex;align-items:stretch}
+#tree .trw .tr{flex:1;min-width:0}
+#tree .ar{flex:none;width:20px;padding:0;border:0;border-radius:0;background:none;color:#aaa;cursor:pointer;text-align:center}
+#tree .ar:hover{color:#fff;background:#2f2f35}
+#tree h4 .rf{float:right;padding:0 8px;font-size:12px}
 #tree .tr.on .hn{color:#444}
 #tree .tr.sld{font-weight:600;color:#d8c3a5}
 #tree .tr.sld.on{color:#111}
@@ -115,7 +120,7 @@ footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#
   <aside id="panel"></aside>
 </main>
 <div id="tl"></div>
-<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.7 (2026-11-01)</footer>
+<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.8 (2026-11-04)</footer>
 <div id="toast"></div>
 <input type="file" id="fileIn" accept=".html,.htm" hidden>
 <input type="file" id="imgIn" accept="image/*" hidden>
@@ -234,39 +239,71 @@ function upd() {
   const r = cur.getBoundingClientRect();
   Object.assign(box.style, { display: 'block', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
 }
-// ── 슬라이드: 한 번에 하나만 보이는 같은 종류의 형제 요소들(예: section.slide)을 찾아 넘겨 가며 편집한다
-//    넘기기는 앱이 쓰는 "지금 보이는 것" 클래스(예: active)를 옮기고, 앱에 같은 일을 하는 show() 함수가 있으면 그것도 부른다
+// ── 슬라이드·화면 전환: 한 번에 하나만 보이는 "같은 가족" 형제들(슬라이드, view-*, s-*, 탭 화면 등)을 찾아 넘겨 가며 편집한다
+//    넘기기 방식 두 가지: ① 앱이 "지금 보이는 것"을 클래스 하나(active 등)로 표시하면 그 클래스를 옮긴다 ② 아니면 편집기가 임시 속성(data-hs-on/off)으로 보이고 숨긴다
+//    임시 속성은 저장 파일에 들어가지 않는다 (build 에서 지움)
+const SKIP = /^(SCRIPT|STYLE|LINK|META|NOSCRIPT|TEMPLATE|HEAD)$/, MAXT = 1500;
+let slideDisp = 'block', slideIdx = 0, slideName = '화면';
+const isOn = c => { const s = doc.defaultView.getComputedStyle(c); return s.display !== 'none' && s.visibility !== 'hidden'; };  // hidden 속성은 이미 display:none 으로 계산돼 있다
+const isShown = c => isOn(c) && +doc.defaultView.getComputedStyle(c).opacity > 0.05;
 function detectSlides() {
   slides = []; slideCls = '';
   if (!doc || !doc.body) return;
-  const vis = c => doc.defaultView.getComputedStyle(c).display !== 'none';
+  const NAMEY = /slide|screen|view|page|step|scene|tab|pane|stage|section/i;
   let best = null;
   for (const p of [doc.body, ...doc.body.querySelectorAll('*')]) {
-    const groups = {};  // 같은 태그끼리 묶어 본다 (슬라이드 곁에 진행 막대·캔버스 같은 다른 태그가 있어도 되게)
-    for (const c of p.children) if (!SKIP.test(c.tagName)) (groups[c.tagName] ??= []).push(c);
-    for (const k of Object.values(groups)) {
-      if (k.length < 3 || k.length > 300) continue;
-      const common = [...k[0].classList].filter(c => k.every(x => x.classList.contains(c)));
-      const shown = k.filter(vis);
-      if (!common.length || shown.length > 1 || (best && best.k.length >= k.length)) continue;
-      const act = shown[0] && [...shown[0].classList].find(c => !common.includes(c) && k.filter(x => x.classList.contains(c)).length === 1);
-      if (act) best = { k, act };
+    const kids = [...p.children].filter(c => !SKIP.test(c.tagName));
+    if (kids.length < 2 || kids.length > 300) continue;
+    const fams = new Map();  // 가족 이름 → 구성원 (같은 클래스 / view-·s- 처럼 같은 id 앞부분 / boardView 처럼 같은 id 끝부분)
+    const add = (n, c) => { if (!fams.has(n)) fams.set(n, []); fams.get(n).push(c); };
+    for (const c of kids) {
+      c.classList.forEach(k => add('.' + k, c));
+      const id = c.id || ''; let m;
+      if ((m = id.match(/^([A-Za-z0-9]+)[-_]/))) add('#' + m[1].toLowerCase() + '-', c);
+      else if ((m = id.match(/[a-z]([A-Z][a-z]+)$/)) && NAMEY.test(m[1])) add('#*' + m[1], c);
+    }
+    for (const [name, k] of fams) {
+      const namey = NAMEY.test(name);
+      if (k.length < (namey ? 2 : 3) || !k.every(c => c.tagName === k[0].tagName)) continue;
+      const shown = k.filter(isShown);
+      if (shown.length !== 1) continue;
+      const score = k.length + (namey ? 6 : 0) + (p === doc.body ? 2 : 0);
+      if (!best || score > best.score) best = { k, name, score, sh: shown[0] };
     }
   }
-  if (best) { slides = best.k; slideCls = best.act; }
+  if (!best) return;
+  slides = best.k;
+  slideName = /slide/i.test(best.name + best.k[0].className) ? '슬라이드' : '화면';
+  slideDisp = doc.defaultView.getComputedStyle(best.sh).display;
+  slideIdx = slides.indexOf(best.sh);
+  // 클래스 방식 확인: 후보 클래스를 다른 구성원에 옮겨 보고 정말 보이고 숨겨지는지 시험한다 (바로 되돌림)
+  const other = slides.find(x => x !== best.sh);
+  for (const c of [...best.sh.classList]) {
+    if (slides.filter(x => x.classList.contains(c)).length !== 1) continue;
+    best.sh.classList.remove(c); other.classList.add(c);
+    const ok = isOn(other) && !isOn(best.sh);
+    other.classList.remove(c); best.sh.classList.add(c);
+    if (ok) { slideCls = c; break; }
+  }
+  let st = doc.getElementById('hs-slides'); if (!st) { st = doc.createElement('style'); st.id = 'hs-slides'; doc.head.appendChild(st); }
+  st.textContent = `[data-hs-off]{display:none!important}[data-hs-on]{display:${slideDisp}!important;visibility:visible!important;opacity:1!important}`;
 }
-const curSlide = () => Math.max(0, slides.findIndex(s => s.classList.contains(slideCls)));
+const curSlide = () => { const i = slides.findIndex(isShown); return i >= 0 ? i : Math.min(slideIdx, slides.length - 1); };
 function slideTitle(sl) {
   const h = sl.querySelector('h1,h2,h3,.title'), t = ((h || sl).textContent || '').trim().replace(/\s+/g, ' ');
-  return t.slice(0, 16) || '(빈 슬라이드)';
+  return (h && t ? t : sl.id || t).slice(0, 16) || '(빈 화면)';
 }
+function clearSlideAttrs() { doc && doc.querySelectorAll('[data-hs-on],[data-hs-off]').forEach(e => { e.removeAttribute('data-hs-on'); e.removeAttribute('data-hs-off'); }); }
 function showSlide(i) {
   if (!slides.length) return;
   i = Math.max(0, Math.min(slides.length - 1, i));
   editing && editing.blur(); select(null);
   const win = f.contentWindow;
-  if (typeof win.show === 'function' && String(win.show).includes(slideCls)) { try { win.show(i); } catch { } }  // 앱의 번호·진행 막대 등도 같이 바뀌게
-  if (!slides[i].classList.contains(slideCls)) slides.forEach((s, k) => s.classList.toggle(slideCls, k === i));
+  if (slideCls) {
+    if (typeof win.show === 'function' && String(win.show).includes(slideCls)) { try { win.show(i); } catch { } }  // 앱의 번호·진행 막대 등도 같이 바뀌게
+    if (!slides[i].classList.contains(slideCls)) slides.forEach((s, k) => s.classList.toggle(slideCls, k === i));
+  } else slides.forEach((s, k) => { s.toggleAttribute('data-hs-on', k === i); s.toggleAttribute('data-hs-off', k !== i); });
+  slideIdx = i;
   if (mpause) setTimeout(freezeMotion, 1200);
   upd(); fill();
 }
@@ -275,39 +312,44 @@ function hover(el) {
   if (!r || r.width < 1 || r.height < 1) { H.style.display = 'none'; return; }
   Object.assign(H.style, { display: 'block', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
 }
-// ── 왼쪽 구조 트리: 슬라이드 번호로 넘기고, 지금 슬라이드 안의 요소만 펼쳐 보여 준다
-const SKIP = /^(SCRIPT|STYLE|LINK|META|NOSCRIPT|TEMPLATE|HEAD)$/, MAXT = 1500;
+// ── 왼쪽 구조 트리: 슬라이드·화면 번호로 넘기고, 펼침/접힘(▸▾)으로 큰 문서도 한눈에 본다
+const tOpen = new WeakMap();  // 사용자가 직접 펼치거나 접은 요소
 function renderTree() {
   const T = $('tree'), top = T.scrollTop; T.innerHTML = '';
   if (!doc || !doc.body) { T.innerHTML = '<h4>구조</h4>'; return; }
   const ci = slides.length ? curSlide() : -1;
   if (slides.length) {
-    T.insertAdjacentHTML('beforeend', `<h4>슬라이드</h4><div class="sl"><button id="slPrev" aria-label="이전 슬라이드">◀</button><b>${ci + 1} / ${slides.length}</b><button id="slNext" aria-label="다음 슬라이드">▶</button></div><div class="sg">${slides.map((sl, k) => `<button data-sl="${k}" class="${k === ci ? 'on' : ''}" title="${esc(slideTitle(sl))}">${k + 1}</button>`).join('')}</div>`);
+    T.insertAdjacentHTML('beforeend', `<h4>${slideName}</h4><div class="sl"><button id="slPrev" aria-label="이전">◀</button><b>${ci + 1} / ${slides.length}</b><button id="slNext" aria-label="다음">▶</button></div><div class="sg">${slides.map((sl, k) => `<button data-sl="${k}" class="${k === ci ? 'on' : ''}" title="${esc(slideTitle(sl))}">${k + 1}</button>`).join('')}</div>`);
     $('slPrev').onclick = () => showSlide(ci - 1); $('slNext').onclick = () => showSlide(ci + 1);
     T.querySelectorAll('[data-sl]').forEach(b => b.onclick = () => showSlide(+b.dataset.sl));
   }
-  T.insertAdjacentHTML('beforeend', '<h4>구조</h4>');
+  T.insertAdjacentHTML('beforeend', '<h4>구조 <button class="rf" id="trRefresh" title="앱 화면이 바뀌었거나 목록이 비어 있으면 눌러서 다시 읽어요">↻ 새로고침</button></h4>');
+  $('trRefresh').onclick = () => { detectSlides(); fill(); toast(slides.length ? `${slideName} ${slides.length}개를 찾았어요` : '넘겨 볼 슬라이드·화면은 찾지 못했어요 (구조 목록은 새로 읽었어요)'); };
+  const anc = new Set(); for (const e of G()) for (let x = e; x && x !== doc.body; x = x.parentElement) anc.add(x);
   let n = 0;
   const walk = (el, d) => {
     for (const c of el.children) {
       if (SKIP.test(c.tagName) || n >= MAXT) continue;
       n++;
-      const b = document.createElement('button'), s = pathOf(c), k = slides.indexOf(c);
+      const b = document.createElement('button'), s = pathOf(c), k = slides.indexOf(c), tag = c.tagName.toLowerCase();
+      const hasKids = [...c.children].some(x => !SKIP.test(x.tagName));
+      const open = tOpen.has(c) ? tOpen.get(c) : anc.has(c) || (k >= 0 ? k === ci : tag === 'svg' ? false : d < 2);
       const own = [...c.childNodes].filter(x => x.nodeType === 3).map(x => x.textContent).join('').trim().replace(/\s+/g, ' ').slice(0, 18);
-      const txt = k >= 0 ? `슬라이드 ${k + 1} · ${slideTitle(c)}` : own || c.getAttribute('alt') || c.getAttribute('aria-label') || '';
+      const txt = k >= 0 ? `${slideName} ${k + 1} · ${slideTitle(c)}` : own || c.getAttribute('alt') || c.getAttribute('aria-label') || '';
       const deep = txt ? '' : c.textContent.trim().replace(/\s+/g, ' ').slice(0, 16);
       const hint = c.id ? '#' + c.id : typeof c.className === 'string' && c.className ? '.' + c.className.trim().split(/\s+/)[0] : '';
       b.className = 'tr' + (c === cur || group.includes(c) ? ' on' : '') + (ch[s] && ch[s].del ? ' gone' : '') + (k >= 0 ? ' sld' : '');
-      b.style.paddingLeft = 8 + d * 12 + 'px';
-      b.innerHTML = `<i>${c.tagName.toLowerCase()}</i>`;
+      b.innerHTML = `<i>${tag}</i>`;
       b.append(txt || (deep ? '“' + deep + '…”' : ''));
       if (hint && k < 0) { const h = document.createElement('span'); h.className = 'hn'; h.textContent = hint; b.append(h); }
       b.onclick = e => { if (k >= 0 && k !== ci) return showSlide(k); e.shiftKey ? toggleGroup(c) : select(c); c.scrollIntoView({ block: 'nearest' }); };
       b.ondblclick = () => k < 0 && startEdit(c);
       b.onmouseenter = () => hover(c); b.onmouseleave = () => hover(null);
-      T.appendChild(b);
-      // 지금 보이지 않는 슬라이드 안쪽과 svg 속(그라디언트·도형 부품)은 펼치지 않는다
-      if ((k < 0 || k === ci) && c.tagName.toLowerCase() !== 'svg') walk(c, d + 1);
+      const w = document.createElement('div'); w.className = 'trw'; w.style.paddingLeft = 4 + d * 12 + 'px';
+      const ar = document.createElement(hasKids ? 'button' : 'span'); ar.className = 'ar';
+      if (hasKids) { ar.textContent = open ? '▾' : '▸'; ar.setAttribute('aria-label', open ? '접기' : '펼치기'); ar.setAttribute('aria-expanded', open); ar.onclick = () => { tOpen.set(c, !open); renderTree(); }; }
+      w.append(ar, b); T.appendChild(w);
+      if (open) walk(c, d + 1);
     }
   };
   walk(doc.body, 0);
@@ -315,7 +357,8 @@ function renderTree() {
   T.scrollTop = top;
   const on = T.querySelector('.tr.on'); if (on) on.scrollIntoView({ block: 'nearest' });
 }
-function select(el) { cur = el; group = []; pend = false; gapR = null; upd(); fill(); }
+function select(el) {
+  for (let e = el && el.parentElement; e; e = e.parentElement) tOpen.delete(e); cur = el; group = []; pend = false; gapR = null; upd(); fill(); }
 // Shift+클릭: 여러 개 선택에 넣거나 뺀다
 function toggleGroup(t) {
   const base = G(), i = base.indexOf(t);
@@ -1034,7 +1077,7 @@ function build() {
   dels.forEach(el => el.remove());  // 경로가 밀리지 않도록 마지막에 한꺼번에
   if (Object.keys(kf).length) { const k = d.createElement('style'); k.setAttribute('data-editor', 'keyframes'); k.textContent = '\n' + kfCss() + '\n'; d.head.appendChild(k); }  // 같은 이름 @keyframes 중 마지막이 이긴다
   const dt = (src.match(/^\s*<!doctype[^>]*>/i) || [''])[0];
-  return { out: dt + (dt ? '\n' : '') + d.documentElement.outerHTML, miss };
+  return { out: (dt + (dt ? '\n' : '') + d.documentElement.outerHTML).replace(/ data-hs-(on|off)=""/g, ''), miss };
 }
 function download(text, name) {
   const a = document.createElement('a');
@@ -1094,8 +1137,8 @@ $('bSnap').onclick = () => { snapOn = !snapOn; $('bSnap').textContent = '🧲 �
 $('bLive').onclick = () => {
   live = !live; $('bLive').textContent = '👆 작동 모드 ' + (live ? '켜짐' : '꺼짐'); $('bLive').classList.toggle('main', live);
   const st = doc && doc.getElementById('hs-hover'); if (st) st.disabled = live;
-  if (live) { editing && editing.blur(); select(null); toast('작동 모드: 앱을 평소처럼 눌러서 다른 화면으로 가 보세요. 끄면 다시 편집할 수 있어요'); }
-  else { upd(); toast('편집 모드로 돌아왔어요'); }
+  if (live) { editing && editing.blur(); select(null); clearSlideAttrs(); toast('작동 모드: 앱을 평소처럼 눌러서 다른 화면으로 가 보세요. 끄면 다시 편집할 수 있어요'); }
+  else { detectSlides(); fill(); upd(); toast('편집 모드로 돌아왔어요'); }
 };
 $('bMob').onclick = () => { $('wrap').classList.toggle('mobile'); setTimeout(upd, 50); };
 fill();
