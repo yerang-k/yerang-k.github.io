@@ -35,7 +35,7 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 #gaps .gp{transform:translate(-50%,-50%);background:#ff9f1a;color:#111;font:600 11px/1 system-ui;padding:2px 4px;border-radius:3px}
 #box{position:absolute;display:none;border:2px solid #3aa0ff;pointer-events:none;z-index:5}
 #hd{position:absolute;right:-7px;bottom:-7px;width:12px;height:12px;background:#3aa0ff;border:2px solid #fff;cursor:se-resize;pointer-events:auto}
-#tree{width:210px;overflow:auto;background:#222226;border-right:1px solid #333;padding:8px 0;font-size:12px}
+#tree{width:236px;overflow:auto;background:#222226;border-right:1px solid #333;padding:8px 0;font-size:12px}
 #tree h4{margin:0 10px 6px;font-size:13px;color:#d8c3a5}
 #tree .tr{display:block;width:100%;text-align:left;border:0;border-radius:0;background:none;padding:3px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#ccc}
 #tree .tr:hover{background:#2f2f35}
@@ -99,6 +99,15 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 #tree .hn{color:#888;margin-left:6px}
 #tree .gp{display:block;padding:0 10px 8px;font-size:12px}
 #tree .gp select{width:100%;margin-top:4px;background:#2c2c30;color:#eee;border:1px solid #444;border-radius:6px;padding:3px}
+#tree .sli{padding:0 6px 6px}
+#tree .si{display:flex;gap:8px;width:100%;text-align:left;border:0;background:none;padding:6px 8px;border-radius:6px;color:#ccc;align-items:baseline}
+#tree .si b{flex:none;width:24px;text-align:right;color:#8a8a90;font-weight:600}
+#tree .si span{flex:1;min-width:0;white-space:normal;line-height:1.3;word-break:keep-all}
+#tree .si:hover{background:#2f2f35}
+#tree .si.on{background:#d8c3a5;color:#111}
+#tree .si.on b{color:#444}
+#tree details.adv{margin:10px 6px 4px;border-top:1px solid #333;padding-top:6px}
+#tree details.adv>summary{cursor:pointer;color:#888;font-size:12px;padding:4px}
 #tree .tools2{display:flex;gap:4px;padding:0 10px 8px}
 #tree .tools2 button{flex:1;padding:3px 4px;font-size:12px}
 #tree .trw{display:flex;align-items:stretch}
@@ -158,7 +167,7 @@ footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#
   <aside id="panel"></aside>
 </main>
 <div id="tl"></div>
-<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.15 (2026-11-04)</footer>
+<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.16 (2026-11-05)</footer>
 <div id="toast"></div>
 <input type="file" id="fileIn" accept=".html,.htm" hidden>
 <input type="file" id="imgIn" accept="image/*" hidden>
@@ -175,6 +184,7 @@ let ch = {};              // 선택자 -> {tx, ty, css:{}, html, src}
 let undo = [];
 let group = [];           // Shift+클릭으로 여러 개 고른 요소 (cur 포함, 2개 이상일 때만 사용)
 const G = () => group.length > 1 ? group : cur ? [cur] : [];
+let nav = { mode: '', list: [], idx: 0, building: false, msg: '', cancel: false }, navTok = 0, navBusy = false, syncT = 0, elemOpen = false;  // 슬라이드 목록: mode 'walk'(앱의 방향키로 넘겨 가며 만든 목록) / 'group'(찾아낸 슬라이드 묶음)
 let forceAttr = false;  // 이 묶음은 클래스로 안 넘어가서 편집기 임시 속성으로만 넘긴다
 let slides = [], slideCls = '';  // 슬라이드 모음(한 번에 하나만 보이는 형제들)과 "지금 보이는 것"을 표시하는 클래스
 let kf = {}, kName = '', kSel = 0, phPct = null, kdrag = null;  // 키프레임 수정본 / 선택한 애니메이션 이름 / 선택한 키프레임 / 재생헤드(%) / 끌기 상태
@@ -361,17 +371,123 @@ function slideTitle(sl) {
   const h = sl.querySelector('h1,h2,h3,.title'), t = ((h || sl).textContent || '').trim().replace(/\s+/g, ' ');
   return (h && t ? t : sl.id || t).slice(0, 16) || '(빈 화면)';
 }
-// 앱이 방향키(←→)로 넘어가는 슬라이드라면, 그 키를 앱에 직접 보내 앱이 스스로 한 단계씩 넘기게 한다 (단계가 슬라이드보다 많은 앱도 가능)
-function appKey(k) {
-  if (!doc) return toast('먼저 HTML을 열어 주세요');
-  editing && editing.blur(); select(null);
+// ── 슬라이드 목록: 앱이 방향키(←→)로 넘어가는 슬라이드면, 그 키를 앱에 직접 보내 한 장씩 넘겨 보며 목록(제목)을 만든다.
+//    목록에서 번호를 누르면 같은 방식으로 그 장까지 넘겨 준다. 키로 안 넘어가는 앱은 찾아낸 슬라이드 묶음(탭·화면)으로 목록을 만든다
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function scanPage() {  // 지금 화면에 보이는 글자(서명)와 제목(가장 큰 글자)
+  const w = doc.defaultView, W = doc.documentElement.clientWidth, H = doc.documentElement.clientHeight, parts = []; let best = null;
+  for (const el of doc.body.querySelectorAll('*')) {
+    if (parts.length >= 80) break;
+    if (SKIP.test(el.tagName)) continue;
+    let t = ''; for (const n of el.childNodes) if (n.nodeType === 3) t += n.textContent;
+    t = t.trim().replace(/\s+/g, ' '); if (!t) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.right < 0 || r.top > H || r.left > W) continue;
+    if (el.checkVisibility && !el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true, opacityProperty: true, visibilityProperty: true })) continue;
+    parts.push(t.slice(0, 40));
+    const fs = parseFloat(w.getComputedStyle(el).fontSize) || 0;
+    if (!best || fs > best.fs) best = { fs, t };
+  }
+  return { sig: parts.join('|'), title: best ? best.t.slice(0, 24) : '' };
+}
+async function quietScan(max = 1500, step = 220) {  // 화면이 잠잠해질 때까지 기다렸다가 읽는다
+  let a = scanPage();
+  for (const t0 = performance.now(); performance.now() - t0 < max;) { await sleep(step); const b = scanPage(); if (b.sig === a.sig) return b; a = b; }
+  return a;
+}
+function sendKey(k) {
   const code = { ArrowLeft: 37, ArrowRight: 39 }[k];
   for (const type of ['keydown', 'keyup']) {
     const e = new KeyboardEvent(type, { key: k, code: k, bubbles: true, cancelable: true });
     Object.defineProperty(e, 'keyCode', { get: () => code }); Object.defineProperty(e, 'which', { get: () => code });
     doc.body.dispatchEvent(e);
   }
-  setTimeout(() => { if (slidesStale()) detectSlides(); fill(); upd(); }, 600);
+}
+function findNavBtn(dir) {  // 키가 안 먹는 앱의 "다음/이전" 버튼
+  const re = dir > 0 ? /다음|next|›|»|→|▶/i : /이전|prev|‹|«|←|◀/i;
+  for (const b of doc.querySelectorAll('button,a,[role=button]')) {
+    const t = (b.getAttribute('aria-label') || b.title || b.textContent || '').trim();
+    if (t.length && t.length <= 8 && re.test(t) && isOn(b) && b.getBoundingClientRect().width > 2) return b;
+  }
+  return null;
+}
+async function pressDir(dir, timeout = 1200, fast) {  // 한 단계 넘기고, 화면이 바뀌면 {바뀐 화면, 걸린 시간 ms} 를 돌려준다 (안 바뀌면 null)
+  const before = scanPage().sig, t0 = performance.now();
+  sendKey(dir > 0 ? 'ArrowRight' : 'ArrowLeft');
+  while (performance.now() - t0 < timeout) {
+    await sleep(120);
+    if (scanPage().sig !== before) { const ms = Math.round(performance.now() - t0); return { ...await (fast ? quietScan(700, 150) : quietScan()), ms }; }
+  }
+  const btn = findNavBtn(dir);
+  if (btn) { const was = live; live = true; btn.click(); live = was; await sleep(500); if (scanPage().sig !== before) return { ...await quietScan(), ms: Math.round(performance.now() - t0) }; }
+  return null;
+}
+function syncIdx(guess) {  // 지금 화면이 목록의 몇 번째인지
+  const s = scanPage().sig, hits = nav.list.map((x, i) => x.sig === s ? i : -1).filter(i => i >= 0);
+  if (!hits.length) return guess ?? nav.idx;
+  return guess == null ? hits[0] : hits.reduce((a, b) => Math.abs(b - guess) < Math.abs(a - guess) ? b : a);
+}
+async function buildNav(manual) {
+  const tok = ++navTok, myDoc = doc, alive = () => tok === navTok && doc === myDoc && !nav.cancel;
+  nav = { mode: '', list: [], idx: 0, building: true, msg: '슬라이드 목록을 만들고 있어요…', cancel: false };
+  renderTree();
+  await sleep(manual ? 100 : 900);
+  if (tok !== navTok || doc !== myDoc) return;
+  detectSlides();
+  const first = await quietScan(2500), text = doc.body.innerText || '';
+  const deckish = slides.length >= 3 || /[←→]|방향키|화살표|arrow/i.test(text) || /\b\d+\s*\/\s*\d+\b/.test(text);
+  const fallback = () => { nav.building = false; nav.mode = slides.length ? 'group' : ''; nav.msg = ''; renderTree(); };
+  if (!manual && !deckish) return fallback();
+  editing && editing.blur(); select(null);
+  const list = [{ sig: first.sig, title: first.title }];
+  let r = await pressDir(1, 3500);  // 첫 누름은 전환 연출이 있을 수 있어 오래 기다린다
+  if (!r) r = await pressDir(1, 1500);
+  if (!r) return alive() ? fallback() : undefined;
+  list.push({ sig: r.sig, title: r.title, ms: r.ms });
+  let miss = 0, looped = false;
+  while (list.length < 200 && alive()) {
+    nav.msg = `${list.length}번째 슬라이드까지 읽었어요…`; renderTree();
+    r = await pressDir(1, 1200, true);
+    if (!r) { if (++miss >= 2) break; continue; }
+    miss = 0;
+    if (r.sig === list[0].sig) { looped = true; break; }  // 처음으로 돌아옴 = 끝
+    list.push({ sig: r.sig, title: r.title, ms: r.ms });
+  }
+  if (tok !== navTok || doc !== myDoc) return;
+  nav.list = list;
+  if (!looped) {  // 처음으로 되돌아간다
+    nav.msg = '처음 화면으로 돌아가는 중…'; renderTree();
+    let m2 = 0;
+    for (let k = 0; k < list.length + 3 && m2 < 2; k++) {
+      if (scanPage().sig === list[0].sig) break;
+      const rr = await pressDir(-1, 1200, true); if (!rr) m2++;
+    }
+  }
+  nav.mode = 'walk'; nav.building = false; nav.msg = ''; nav.idx = syncIdx(0); renderTree();
+  toast(`슬라이드 ${list.length}개를 찾았어요. 왼쪽 목록에서 누르면 바로 이동해요`);
+}
+async function navGo(k) {
+  if (nav.building || navBusy) return;
+  if (nav.mode === 'group') return showSlide(k);
+  if (nav.mode !== 'walk') return;
+  navBusy = true; editing && editing.blur(); select(null);
+  try {  // 한 장씩 누르며 매번 화면이 바뀌었는지 확인한다 (전환 연출이 긴 장은 만들 때 잰 시간만큼 더 기다린다)
+    let c = syncIdx(nav.idx), fails = 0;
+    for (let guard = Math.abs(k - c) + 8; c !== k && guard-- > 0 && fails < 3;) {
+      const dir = k > c ? 1 : -1, exp = (nav.list[dir > 0 ? c + 1 : c] || {}).ms || 0;
+      const r = await pressDir(dir, Math.max(1200, exp * 1.6 + 600), true);
+      if (!r) { fails++; c = syncIdx(c); continue; }
+      fails = 0; c = syncIdx(c + dir);
+    }
+    await quietScan(2000);
+    nav.idx = syncIdx(c);
+  } finally { navBusy = false; if (mpause) setTimeout(freezeMotion, 1200); renderTree(); fill(); upd(); }
+}
+function navStep(d) {
+  if (nav.building) return;
+  if (nav.mode === 'group') return showSlide(curSlide() + d);
+  if (nav.mode === 'walk') return navGo(Math.max(0, Math.min(nav.list.length - 1, nav.idx + d)));
+  if (doc) { sendKey(d > 0 ? 'ArrowRight' : 'ArrowLeft'); toast('목록이 없어서 앱에 방향키만 보냈어요'); }
 }
 // 문제 알려주기: 화면 구조 요약을 복사한다 (파일 내용은 들어가지 않고 요소 이름·상태만)
 function diagnose() {
@@ -379,6 +495,7 @@ function diagnose() {
   const w = f.contentWindow, nm = e => e.tagName.toLowerCase() + (e.id ? '#' + e.id : typeof e.className === 'string' && e.className ? '.' + e.className.trim().split(/\s+/).slice(0, 2).join('.') : '');
   const chain = e => { const a = []; for (let x = e; x && x !== doc.documentElement && a.length < 8; x = x.parentElement) a.push(nm(x)); return a.reverse().join(' > '); };
   const L = [`[편집기 ${(document.querySelector('footer').textContent.match(/v[\d.]+/) || [''])[0]}] 파일: ${fname || '(이름 없음)'}`];
+  L.push(`슬라이드 목록: 방식 ${nav.mode || '없음'}, ${nav.list.length}개, 지금 ${nav.idx + 1}번`);
   L.push(`슬라이드 후보 ${cands.length}개 · 고른 묶음 ${slides.length}개(${slideName}) · 방식 ${slideCls && !forceAttr ? '클래스 ' + slideCls : '임시 속성'}`);
   if (slides.length) {
     L.push('묶음 위치: ' + chain(slides[0].parentElement));
@@ -414,7 +531,7 @@ function showSlide(i) {
   upd(); fill();
   setTimeout(() => {
     const w = slides[i] && slides[i].isConnected && whyHidden(slides[i]);
-    if (w) toast(`번호는 바꿨지만 화면에서는 안 보여요 (${w}). 팝업이면 앱에서 먼저 닫고(작동 모드), 아니면 왼쪽 "앱 방식으로 넘기기" ⏩를 눌러 보세요. 계속 안 되면 "🩺 문제 알려주기"를 눌러 대화창에 붙여넣어 주세요`);
+    if (w) toast(`번호는 바꿨지만 화면에서는 안 보여요 (${w}). 팝업이면 앱에서 먼저 닫고(작동 모드), 아니면 왼쪽 목록의 ◀ ▶ 로 넘겨 보세요. 계속 안 되면 "🩺 문제 알려주기"를 눌러 대화창에 붙여넣어 주세요`);
   }, 400);
 }
 function hover(el) {
@@ -422,45 +539,50 @@ function hover(el) {
   if (!r || r.width < 1 || r.height < 1) { H.style.display = 'none'; return; }
   Object.assign(H.style, { display: 'block', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
 }
-// ── 왼쪽 구조 트리: 슬라이드·화면 번호로 넘기고, 펼침/접힘(▸▾)으로 큰 문서도 한눈에 본다
-const tOpen = new WeakMap();  // 사용자가 직접 펼치거나 접은 요소
+// ── 왼쪽: 슬라이드 목록 (누르면 바로 이동). 요소 목록은 맨 아래 "고급"에 접어 둔다
+const tOpen = new WeakMap();  // 요소 목록에서 사용자가 직접 펼치거나 접은 요소
 function renderTree() {
   const T = $('tree'), top = T.scrollTop; T.innerHTML = '';
-  if (!doc || !doc.body) { T.innerHTML = '<h4>구조</h4>'; return; }
-  const ci = slides.length ? curSlide() : -1;
-  T.insertAdjacentHTML('beforeend', '<h4>앱 방식으로 넘기기</h4><div class="tools2"><button id="appPrev" title="앱이 ← 키로 넘어가는 경우, 그 방식으로 한 단계 이전">⏪ 이전</button><button id="appNext" title="앱이 → 키로 넘어가는 경우, 그 방식으로 한 단계 다음">다음 ⏩</button></div>');
-  $('appPrev').onclick = () => appKey('ArrowLeft'); $('appNext').onclick = () => appKey('ArrowRight');
-  if (slides.length) {
-    T.insertAdjacentHTML('beforeend', `<h4>${slideName}</h4><div class="sl"><button id="slPrev" aria-label="이전">◀</button><b>${ci + 1} / ${slides.length}</b><button id="slNext" aria-label="다음">▶</button></div><div class="sg">${slides.map((sl, k) => `<button data-sl="${k}" class="${k === ci ? 'on' : ''}" title="${esc(slideTitle(sl))}">${k + 1}</button>`).join('')}</div>`);
-    $('slPrev').onclick = () => showSlide(ci - 1); $('slNext').onclick = () => showSlide(ci + 1);
-    T.querySelectorAll('[data-sl]').forEach(b => b.onclick = () => showSlide(+b.dataset.sl));
-    if (cands.length > 1) {
-      T.insertAdjacentHTML('beforeend', `<label class="gp">다른 묶음으로 보기<select id="slGroup">${cands.map((c, k) => `<option value="${k}" ${k === groupIdx ? 'selected' : ''}>${esc(c.name.replace(/^[.#*]+/, ''))} · ${c.k.length}개</option>`).join('')}</select></label>`);
-      $('slGroup').onchange = e => { groupIdx = +e.target.value; applyGroup(cands[groupIdx]); fill(); };
-    }
+  if (!doc || !doc.body) { T.innerHTML = '<h4>슬라이드</h4><p class="hint" style="padding:0 10px">HTML 파일을 열면 슬라이드 목록이 여기에 나와요.</p>'; return; }
+  if (nav.building) {
+    T.innerHTML = `<h4>슬라이드</h4><p class="hint" style="padding:0 10px">${esc(nav.msg)}<br>화면이 저절로 넘어가요. 잠시만 기다려 주세요.</p><div class="tools2"><button id="navCancel">그만 만들기</button></div>`;
+    $('navCancel').onclick = () => { nav.cancel = true; }; return;
   }
-  T.insertAdjacentHTML('beforeend', '<h4>구조</h4><div class="tools2"><button id="trRefresh" title="앱 화면이 바뀌었거나 목록이 비어 있으면 눌러서 다시 읽어요">↻ 새로고침</button><button id="trDiag" title="화면이 이상할 때 눌러서 대화창에 붙여넣으면 원인을 찾을 수 있어요">🩺 문제 알려주기</button></div>');
-  $('trRefresh').onclick = () => { detectSlides(); fill(); toast(slides.length ? `${slideName} ${slides.length}개를 찾았어요` : '넘겨 볼 슬라이드·화면은 찾지 못했어요 (구조 목록은 새로 읽었어요)'); };
-  $('trDiag').onclick = diagnose;
+  const group = nav.mode === 'group', titles = group ? slides.map(slideTitle) : nav.list.map(x => x.title), ci = group ? curSlide() : nav.idx;
+  T.insertAdjacentHTML('beforeend', '<h4>슬라이드</h4>');
+  if (titles.length) {
+    T.insertAdjacentHTML('beforeend', `<div class="tools2"><button id="navPrev">◀ 이전</button><button id="navNext">다음 ▶</button></div><div class="sli">${titles.map((t, k) => `<button class="si${k === ci ? ' on' : ''}" data-k="${k}" ${k === ci ? 'aria-current="true"' : ''}><b>${k + 1}</b><span>${esc(t || '(제목 없음)')}</span></button>`).join('')}</div>`);
+    $('navPrev').onclick = () => navStep(-1); $('navNext').onclick = () => navStep(1);
+    T.querySelectorAll('.si').forEach(b => b.onclick = () => navGo(+b.dataset.k));
+  } else T.insertAdjacentHTML('beforeend', '<p class="hint" style="padding:0 10px">슬라이드를 찾지 못했어요. 슬라이드 앱이면 아래 "목록 만들기"를 눌러 보세요.</p>');
+  T.insertAdjacentHTML('beforeend', `<div class="tools2"><button id="navRebuild" title="앱을 한 장씩 넘겨 보며 목록을 새로 만들어요">↻ ${titles.length ? '목록 다시 만들기' : '목록 만들기'}</button><button id="trDiag" title="화면이 이상할 때 눌러서 대화창에 붙여넣으면 원인을 찾을 수 있어요">🩺 문제 알려주기</button></div>
+    <details class="adv" id="elemBox" ${elemOpen ? 'open' : ''}><summary>고급: 요소 목록</summary><div id="elemTree"></div></details>`);
+  $('navRebuild').onclick = () => buildNav(true); $('trDiag').onclick = diagnose;
+  $('elemBox').ontoggle = e => { if (e.target.open === elemOpen) return; elemOpen = e.target.open; renderTree(); };
+  if (elemOpen) renderElemTree($('elemTree'));
+  T.scrollTop = top;
+  const on = T.querySelector('.si.on'); if (on && !elemOpen) on.scrollIntoView({ block: 'nearest' });
+}
+function renderElemTree(T) {
   const anc = new Set(); for (const e of G()) for (let x = e; x && x !== doc.body; x = x.parentElement) anc.add(x);
   let n = 0;
   const walk = (el, d) => {
     for (const c of el.children) {
       if (SKIP.test(c.tagName) || n >= MAXT) continue;
       n++;
-      const b = document.createElement('button'), s = pathOf(c), k = slides.indexOf(c), tag = c.tagName.toLowerCase();
+      const b = document.createElement('button'), s = pathOf(c), tag = c.tagName.toLowerCase();
       const hasKids = [...c.children].some(x => !SKIP.test(x.tagName));
-      const open = tOpen.has(c) ? tOpen.get(c) : anc.has(c) || (k >= 0 ? k === ci : tag === 'svg' ? false : d < 2);
+      const open = tOpen.has(c) ? tOpen.get(c) : anc.has(c) || (tag === 'svg' ? false : d < 2);
       const own = [...c.childNodes].filter(x => x.nodeType === 3).map(x => x.textContent).join('').trim().replace(/\s+/g, ' ').slice(0, 18);
-      const txt = k >= 0 ? `${slideName} ${k + 1} · ${slideTitle(c)}` : own || c.getAttribute('alt') || c.getAttribute('aria-label') || '';
+      const txt = own || c.getAttribute('alt') || c.getAttribute('aria-label') || '';
       const deep = txt ? '' : c.textContent.trim().replace(/\s+/g, ' ').slice(0, 16);
       const hint = c.id ? '#' + c.id : typeof c.className === 'string' && c.className ? '.' + c.className.trim().split(/\s+/)[0] : '';
-      b.className = 'tr' + (c === cur || group.includes(c) ? ' on' : '') + (ch[s] && ch[s].del ? ' gone' : '') + (k >= 0 ? ' sld' : '');
+      b.className = 'tr' + (c === cur || group.includes(c) ? ' on' : '') + (ch[s] && ch[s].del ? ' gone' : '');
       b.innerHTML = `<i>${tag}</i>`;
       b.append(txt || (deep ? '“' + deep + '…”' : ''));
-      if (hint && k < 0) { const h = document.createElement('span'); h.className = 'hn'; h.textContent = hint; b.append(h); }
-      b.onclick = e => { if (k >= 0 && k !== ci) return showSlide(k); e.shiftKey ? toggleGroup(c) : select(c); c.scrollIntoView({ block: 'nearest' }); };
-      b.ondblclick = () => k < 0 && startEdit(c);
+      if (hint) { const h = document.createElement('span'); h.className = 'hn'; h.textContent = hint; b.append(h); }
+      b.onclick = e => { e.shiftKey ? toggleGroup(c) : select(c); c.scrollIntoView({ block: 'nearest' }); };
+      b.ondblclick = () => startEdit(c);
       b.onmouseenter = () => hover(c); b.onmouseleave = () => hover(null);
       const w = document.createElement('div'); w.className = 'trw'; w.style.paddingLeft = 4 + d * 12 + 'px';
       const ar = document.createElement(hasKids ? 'button' : 'span'); ar.className = 'ar';
@@ -470,9 +592,7 @@ function renderTree() {
     }
   };
   walk(doc.body, 0);
-  if (n >= MAXT) T.insertAdjacentHTML('beforeend', '<p class="hint" style="margin:6px 10px">요소가 많아 일부만 보여요. 나머지는 화면에서 직접 눌러 고르세요.</p>');
-  T.scrollTop = top;
-  const on = T.querySelector('.tr.on'); if (on) on.scrollIntoView({ block: 'nearest' });
+  if (n >= MAXT) T.insertAdjacentHTML('beforeend', '<p class="hint" style="margin:6px 10px">요소가 많아 일부만 보여요.</p>');
 }
 function select(el) {
   for (let e = el && el.parentElement; e; e = e.parentElement) tOpen.delete(e); cur = el; group = []; pend = false; gapR = null; upd(); fill(); }
@@ -803,6 +923,7 @@ function showGuides(gx, gy, lx, ly, el) {
 
 // ── 이동: 클릭 후 끌기
 function onDown(e) {
+  if (nav.building) return e.preventDefault();
   if (e.button !== 0 || live) return;
   if (editing) { if (editing.contains(e.target)) return; editing.blur(); }
   e.preventDefault();
@@ -840,8 +961,9 @@ function nudge(el, tx, ty) {  // 화면 갱신(upd)은 부른 쪽에서
   render(s);
 }
 function onKey(e) {
+  if (nav.building) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { if (!editing) { e.preventDefault(); doUndo(); } return; }
-  if (e.altKey && !editing && slides.length && /^Arrow(Left|Right)$/.test(e.key)) { e.preventDefault(); e.stopPropagation(); return showSlide(curSlide() + (e.key === 'ArrowRight' ? 1 : -1)); }
+  if (e.altKey && !editing && (nav.list.length || slides.length) && /^Arrow(Left|Right)$/.test(e.key)) { e.preventDefault(); e.stopPropagation(); return navStep(e.key === 'ArrowRight' ? 1 : -1); }
   const els = G();
   if (!els.length || editing) return;
   if (e.key === 'Delete') { e.preventDefault(); return delEl(); }
@@ -1207,7 +1329,12 @@ f.onload = () => {
   doc.addEventListener('keydown', onKey);
   doc.addEventListener('keydown', e => { if (editing) e.stopPropagation(); });  // 글자를 고치는 중 스페이스·방향키가 앱의 슬라이드 넘기기로 새지 않게
   doc.addEventListener('scroll', upd, true);
+  doc.addEventListener('keyup', e => {  // 선생님이 직접 방향키로 넘기면 목록의 현재 위치를 따라가게
+    if (!/^(Arrow|Page|Home|End| |Enter)/.test(e.key) || nav.mode !== 'walk' || navBusy || nav.building) return;
+    clearTimeout(syncT); syncT = setTimeout(() => { nav.idx = syncIdx(); renderTree(); }, 900);
+  });
   fill(); upd();
+  buildNav();
   // 빌드가 필요한 앱(React 소스 등)은 HTML만으로는 화면이 비어 있다
   setTimeout(() => {
     if (doc && !doc.body.innerText.trim() && doc.body.querySelectorAll('*').length < 5)
@@ -1318,7 +1445,7 @@ $('bLive').onclick = () => {
   live = !live; $('bLive').textContent = '👆 작동 모드 ' + (live ? '켜짐' : '꺼짐'); $('bLive').classList.toggle('main', live);
   const st = doc && doc.getElementById('hs-hover'); if (st) st.disabled = live;
   if (live) { editing && editing.blur(); select(null); clearSlideAttrs(); toast('작동 모드: 앱을 평소처럼 눌러서 다른 화면으로 가 보세요. 끄면 다시 편집할 수 있어요'); }
-  else { detectSlides(); fill(); upd(); toast('편집 모드로 돌아왔어요'); }
+  else { detectSlides(); if (nav.mode === 'walk') nav.idx = syncIdx(); fill(); upd(); toast('편집 모드로 돌아왔어요'); }
 };
 $('bMob').onclick = () => { $('wrap').classList.toggle('mobile'); setTimeout(upd, 50); };
 fill();
