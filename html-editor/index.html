@@ -99,6 +99,8 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 #tree .hn{color:#888;margin-left:6px}
 #tree .gp{display:block;padding:0 10px 8px;font-size:12px}
 #tree .gp select{width:100%;margin-top:4px;background:#2c2c30;color:#eee;border:1px solid #444;border-radius:6px;padding:3px}
+#tree .tools2{display:flex;gap:4px;padding:0 10px 8px}
+#tree .tools2 button{flex:1;padding:3px 4px;font-size:12px}
 #tree .trw{display:flex;align-items:stretch}
 #tree .trw .tr{flex:1;min-width:0}
 #tree .ar{flex:none;width:20px;padding:0;border:0;border-radius:0;background:none;color:#aaa;cursor:pointer;text-align:center}
@@ -147,7 +149,7 @@ footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#
   <aside id="panel"></aside>
 </main>
 <div id="tl"></div>
-<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.13 (2026-11-04)</footer>
+<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.14 (2026-11-04)</footer>
 <div id="toast"></div>
 <input type="file" id="fileIn" accept=".html,.htm" hidden>
 <input type="file" id="imgIn" accept="image/*" hidden>
@@ -349,6 +351,38 @@ function slideTitle(sl) {
   const h = sl.querySelector('h1,h2,h3,.title'), t = ((h || sl).textContent || '').trim().replace(/\s+/g, ' ');
   return (h && t ? t : sl.id || t).slice(0, 16) || '(빈 화면)';
 }
+// 앱이 방향키(←→)로 넘어가는 슬라이드라면, 그 키를 앱에 직접 보내 앱이 스스로 한 단계씩 넘기게 한다 (단계가 슬라이드보다 많은 앱도 가능)
+function appKey(k) {
+  if (!doc) return toast('먼저 HTML을 열어 주세요');
+  editing && editing.blur(); select(null);
+  const code = { ArrowLeft: 37, ArrowRight: 39 }[k];
+  for (const type of ['keydown', 'keyup']) {
+    const e = new KeyboardEvent(type, { key: k, code: k, bubbles: true, cancelable: true });
+    Object.defineProperty(e, 'keyCode', { get: () => code }); Object.defineProperty(e, 'which', { get: () => code });
+    doc.body.dispatchEvent(e);
+  }
+  setTimeout(() => { if (slidesStale()) detectSlides(); fill(); upd(); }, 600);
+}
+// 문제 알려주기: 화면 구조 요약을 복사한다 (파일 내용은 들어가지 않고 요소 이름·상태만)
+function diagnose() {
+  if (!doc) return toast('먼저 HTML을 열어 주세요');
+  const w = f.contentWindow, nm = e => e.tagName.toLowerCase() + (e.id ? '#' + e.id : typeof e.className === 'string' && e.className ? '.' + e.className.trim().split(/\s+/).slice(0, 2).join('.') : '');
+  const chain = e => { const a = []; for (let x = e; x && x !== doc.documentElement && a.length < 8; x = x.parentElement) a.push(nm(x)); return a.reverse().join(' > '); };
+  const L = [`[편집기 ${(document.querySelector('footer').textContent.match(/v[\d.]+/) || [''])[0]}] 파일: ${fname || '(이름 없음)'}`];
+  L.push(`슬라이드 후보 ${cands.length}개 · 고른 묶음 ${slides.length}개(${slideName}) · 방식 ${slideCls && !forceAttr ? '클래스 ' + slideCls : '임시 속성'}`);
+  if (slides.length) {
+    L.push('묶음 위치: ' + chain(slides[0].parentElement));
+    slides.slice(0, 3).forEach((s, k) => { const c = w.getComputedStyle(s); L.push(`  ${k + 1}번 ${nm(s)} display=${c.display} opacity=${c.opacity} visibility=${c.visibility} position=${c.position}`); });
+    const t = slides[Math.min(slideIdx, slides.length - 1)], why = t && whyHidden(t);
+    L.push(`지금 번호 ${slideIdx + 1}번: ${why || '화면에 보임'}`);
+    if (why) { const r = t.getBoundingClientRect(), x = doc.elementFromPoint(Math.max(0, r.left + r.width / 2), Math.max(0, r.top + r.height / 2)); if (x) L.push(`  가린 것: ${chain(x)} (묶음 안 ${slides.findIndex(s => s.contains(x)) + 1 || '아님'})`); }
+  }
+  const base = new Set(Object.getOwnPropertyNames(window)), mine = Object.getOwnPropertyNames(w).filter(k => !base.has(k) && typeof w[k] === 'function').slice(0, 40);
+  L.push('앱이 만든 함수: ' + (mine.join(', ') || '(없음)'));
+  L.push('body 바로 아래: ' + [...doc.body.children].filter(c => !SKIP.test(c.tagName)).slice(0, 12).map(nm).join(', '));
+  const text = L.join('\n');
+  (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(() => toast('문제 정보를 복사했어요. 대화창에 붙여넣어 주세요'), () => prompt('복사해서 대화창에 붙여넣어 주세요', text));
+}
 function clearSlideAttrs() { doc && doc.querySelectorAll('[data-hs-on],[data-hs-off]').forEach(e => { e.removeAttribute('data-hs-on'); e.removeAttribute('data-hs-off'); }); }
 function showSlide(i) {
   if (slidesStale()) { detectSlides(); fill(); }
@@ -370,7 +404,7 @@ function showSlide(i) {
   upd(); fill();
   setTimeout(() => {
     const w = slides[i] && slides[i].isConnected && whyHidden(slides[i]);
-    if (w) toast(`번호는 바꿨지만 화면에서는 안 보여요 (${w}). 팝업이면 앱에서 먼저 닫고(작동 모드), 아니면 왼쪽 "다른 묶음으로 보기"나 ↻ 새로고침을 써 보세요`);
+    if (w) toast(`번호는 바꿨지만 화면에서는 안 보여요 (${w}). 팝업이면 앱에서 먼저 닫고(작동 모드), 아니면 왼쪽 "앱 방식으로 넘기기" ⏩를 눌러 보세요. 계속 안 되면 "🩺 문제 알려주기"를 눌러 대화창에 붙여넣어 주세요`);
   }, 400);
 }
 function hover(el) {
@@ -384,6 +418,8 @@ function renderTree() {
   const T = $('tree'), top = T.scrollTop; T.innerHTML = '';
   if (!doc || !doc.body) { T.innerHTML = '<h4>구조</h4>'; return; }
   const ci = slides.length ? curSlide() : -1;
+  T.insertAdjacentHTML('beforeend', '<h4>앱 방식으로 넘기기</h4><div class="tools2"><button id="appPrev" title="앱이 ← 키로 넘어가는 경우, 그 방식으로 한 단계 이전">⏪ 이전</button><button id="appNext" title="앱이 → 키로 넘어가는 경우, 그 방식으로 한 단계 다음">다음 ⏩</button></div>');
+  $('appPrev').onclick = () => appKey('ArrowLeft'); $('appNext').onclick = () => appKey('ArrowRight');
   if (slides.length) {
     T.insertAdjacentHTML('beforeend', `<h4>${slideName}</h4><div class="sl"><button id="slPrev" aria-label="이전">◀</button><b>${ci + 1} / ${slides.length}</b><button id="slNext" aria-label="다음">▶</button></div><div class="sg">${slides.map((sl, k) => `<button data-sl="${k}" class="${k === ci ? 'on' : ''}" title="${esc(slideTitle(sl))}">${k + 1}</button>`).join('')}</div>`);
     $('slPrev').onclick = () => showSlide(ci - 1); $('slNext').onclick = () => showSlide(ci + 1);
@@ -393,8 +429,9 @@ function renderTree() {
       $('slGroup').onchange = e => { groupIdx = +e.target.value; applyGroup(cands[groupIdx]); fill(); };
     }
   }
-  T.insertAdjacentHTML('beforeend', '<h4>구조 <button class="rf" id="trRefresh" title="앱 화면이 바뀌었거나 목록이 비어 있으면 눌러서 다시 읽어요">↻ 새로고침</button></h4>');
+  T.insertAdjacentHTML('beforeend', '<h4>구조</h4><div class="tools2"><button id="trRefresh" title="앱 화면이 바뀌었거나 목록이 비어 있으면 눌러서 다시 읽어요">↻ 새로고침</button><button id="trDiag" title="화면이 이상할 때 눌러서 대화창에 붙여넣으면 원인을 찾을 수 있어요">🩺 문제 알려주기</button></div>');
   $('trRefresh').onclick = () => { detectSlides(); fill(); toast(slides.length ? `${slideName} ${slides.length}개를 찾았어요` : '넘겨 볼 슬라이드·화면은 찾지 못했어요 (구조 목록은 새로 읽었어요)'); };
+  $('trDiag').onclick = diagnose;
   const anc = new Set(); for (const e of G()) for (let x = e; x && x !== doc.body; x = x.parentElement) anc.add(x);
   let n = 0;
   const walk = (el, d) => {
