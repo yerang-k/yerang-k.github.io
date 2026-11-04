@@ -122,7 +122,7 @@ footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#
   <aside id="panel"></aside>
 </main>
 <div id="tl"></div>
-<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.10 (2026-11-04)</footer>
+<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.11 (2026-11-04)</footer>
 <div id="toast"></div>
 <input type="file" id="fileIn" accept=".html,.htm" hidden>
 <input type="file" id="imgIn" accept="image/*" hidden>
@@ -311,11 +311,12 @@ function watchDom() {
   });
   mo.observe(doc.body, { childList: true, subtree: true });
 }
-function viewable(el) {  // 그 요소가 실제로 화면에 보이고 다른 것에 가려지지 않았는지
+function whyHidden(el) {  // 그 요소가 실제로 화면에 보이면 '' , 아니면 이유 (화면 밖 / 무엇에 가려짐)
   const r = el.getBoundingClientRect(), W = doc.documentElement.clientWidth, H = doc.documentElement.clientHeight;
-  if (r.width < 2 || r.height < 2 || r.right < 0 || r.bottom < 0 || r.left > W || r.top > H) return false;
+  if (r.width < 2 || r.height < 2 || r.right < 0 || r.bottom < 0 || r.left > W || r.top > H) return '화면 밖에 있어요';
   const t = doc.elementFromPoint(Math.min(Math.max(r.left + r.width / 2, 0), W - 1), Math.min(Math.max(r.top + r.height / 2, 0), H - 1));
-  return !!t && (el.contains(t) || t.contains(el));
+  if (!t || el.contains(t) || t.contains(el)) return '';
+  return `${t.tagName.toLowerCase()}${t.id ? '#' + t.id : typeof t.className === 'string' && t.className ? '.' + t.className.trim().split(/\s+/)[0] : ''} 에 가려져 있어요`;
 }
 const curSlide = () => { const i = slides.findIndex(isShown); return i >= 0 ? i : Math.min(slideIdx, slides.length - 1); };
 function slideTitle(sl) {
@@ -336,7 +337,10 @@ function showSlide(i) {
   slideIdx = i;
   if (mpause) setTimeout(freezeMotion, 1200);
   upd(); fill();
-  setTimeout(() => { if (slides[i] && slides[i].isConnected && !viewable(slides[i])) toast('번호는 바꿨지만 화면에서는 안 보여요. 왼쪽의 "묶음" 목록에서 다른 묶음을 골라 보거나 ↻ 새로고침을 눌러 보세요'); }, 400);
+  setTimeout(() => {
+    const w = slides[i] && slides[i].isConnected && whyHidden(slides[i]);
+    if (w) toast(`번호는 바꿨지만 화면에서는 안 보여요 (${w}). 팝업이면 앱에서 먼저 닫고(작동 모드), 아니면 왼쪽 "다른 묶음으로 보기"나 ↻ 새로고침을 써 보세요`);
+  }, 400);
 }
 function hover(el) {
   const H = $('hov'), r = el && el.isConnected ? el.getBoundingClientRect() : null;
