@@ -167,7 +167,7 @@ footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#
   <aside id="panel"></aside>
 </main>
 <div id="tl"></div>
-<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.18 (2026-11-05)</footer>
+<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.19 (2026-11-05)</footer>
 <div id="toast"></div>
 <input type="file" id="fileIn" accept=".html,.htm" hidden>
 <input type="file" id="imgIn" accept="image/*" hidden>
@@ -387,7 +387,7 @@ function scanPage() {  // 지금 화면에 보이는 글자(sig), 제목(가장 
     if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.right < 0 || r.top > H || r.left > W) continue;
     if (el.checkVisibility && !el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true, opacityProperty: true, visibilityProperty: true })) continue;
     seen++; if (parts.length < 120) parts.push(t.slice(0, 40));
-    if (!counter && /^\d{1,3}\s*\/\s*\d{1,3}$/.test(t)) counter = t.replace(/\s+/g, '');
+    if (/^\d{1,3}\s*\/\s*\d{1,3}$/.test(t)) { if (!counter) counter = t.replace(/\s+/g, ''); continue; }  // 쪽수 표시는 제목 후보에서 뺀다
     const fs = parseFloat(w.getComputedStyle(el).fontSize) || 0;
     if (!best || fs > best.fs) best = { fs, t };
   }
