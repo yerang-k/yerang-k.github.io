@@ -167,7 +167,7 @@ footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#
   <aside id="panel"></aside>
 </main>
 <div id="tl"></div>
-<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.25 (2026-11-05)</footer>
+<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.26 (2026-11-05)</footer>
 <div id="toast"></div>
 <input type="file" id="fileIn" accept=".html,.htm" hidden>
 <input type="file" id="imgIn" accept="image/*" hidden>
@@ -446,6 +446,19 @@ function syncIdx(guess) {  // 지금 화면이 목록의 몇 번째인지
   if (!hits.length) return guess ?? nav.idx;
   return guess == null ? hits[0] : hits.reduce((a, b) => Math.abs(b - guess) < Math.abs(a - guess) ? b : a);
 }
+function groupOfSize(n) {
+  let best = null;
+  for (const p of [doc.body, ...doc.body.querySelectorAll('*')]) {
+    const g = {};
+    for (const c of p.children) if (!SKIP.test(c.tagName)) (g[c.tagName] ??= []).push(c);
+    for (const k of Object.values(g)) {
+      if (k.length !== n || !k.every(c => c.textContent.trim())) continue;
+      const named = /slide|screen|page|step|view|scene|card|sec/i.test(String(k[0].className) + k[0].id);
+      if (!best || (named && !best.named)) best = { k, named };
+    }
+  }
+  return best && best.k;
+}
 async function buildNav(manual) {
   const tok = ++navTok, myDoc = doc, alive = () => tok === navTok && doc === myDoc && !nav.cancel;
   nav = { mode: '', list: [], idx: 0, building: true, msg: '슬라이드 목록을 만들고 있어요…', cancel: false, jumpFn: undefined };
@@ -488,9 +501,8 @@ async function buildNav(manual) {
     for (let k = 0, m2 = 0; k < list.length + 3 && m2 < 2 && scanPage().key !== list[0].key; k++) { if (!await pressDir(-1, 900, 2)) m2++; }
     await quietScan(1500, 150);
   }
-  detectSlides();  // 처음에는 슬라이드가 아직 나타나는 중이라 못 찾았을 수 있으니, 다 만든 지금 다시 찾는다
-  const grp = cands.find(c => c.k.length === list.length && c.k.every(x => x.isConnected));  // 같은 개수의 슬라이드 묶음이 있으면 제목은 거기서 정확히
-  if (grp) list.forEach((x, i) => { const t = slideTitle(grp.k[i]); if (t && t !== '(빈 화면)') x.title = t; });
+  const grp = groupOfSize(list.length);  // 화면에 보이는지와 상관없이, 슬라이드 수와 같은 개수의 형제 요소 묶음이 있으면 제목은 거기서 정확히 읽는다
+  if (grp) list.forEach((x, i) => { const t = slideTitle(grp[i]); if (t && t !== '(빈 화면)') x.title = t; });
   nav.mode = 'walk'; nav.building = false; nav.msg = ''; nav.idx = syncIdx(0); renderTree();
   toast(`슬라이드 ${list.length}개를 찾았어요. 왼쪽 목록에서 누르면 바로 이동해요`);
 }
