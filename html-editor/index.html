@@ -167,7 +167,7 @@ footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#
   <aside id="panel"></aside>
 </main>
 <div id="tl"></div>
-<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.20 (2026-11-05)</footer>
+<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.21 (2026-11-05)</footer>
 <div id="toast"></div>
 <input type="file" id="fileIn" accept=".html,.htm" hidden>
 <input type="file" id="imgIn" accept="image/*" hidden>
@@ -226,6 +226,7 @@ function render(s) {
   t ? el.setAttribute('style', t) : el.removeAttribute('style');
   const h = e && e.html != null ? e.html : o.html;
   if (el.innerHTML !== h) el.innerHTML = h;
+  if (e && e.da) el.setAttribute(e.da[0], e.da[1]);
   if (e && e.gf) addFontLink(doc, e.gf);
   const sc = e && e.src != null ? e.src : o.src;
   sc == null ? el.removeAttribute('src') : el.setAttribute('src', sc);
@@ -376,22 +377,24 @@ function slideTitle(sl) {
 //    "한 장 넘어갔다"의 기준(key): 화면에 "3 / 15" 같은 쪽수 표시가 있으면 그 숫자, 없으면 가장 큰 글자(제목). 움직이는 글자·장식은 장이 바뀐 것으로 치지 않는다
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 function scanPage() {  // 지금 화면에 보이는 글자(sig), 제목(가장 큰 글자), 쪽수 표시(counter)
-  const w = doc.defaultView, W = doc.documentElement.clientWidth, H = doc.documentElement.clientHeight, parts = []; let best = null, counter = '';
+  const w = doc.defaultView, W = doc.documentElement.clientWidth, H = doc.documentElement.clientHeight, parts = []; let best = null, head = '', counter = '';
   let seen = 0;
   for (const el of doc.body.querySelectorAll('*')) {
     if (seen >= 400) break;  // 글 있는 요소 400개까지만 훑는다 (서명은 앞 120개만)
     if (SKIP.test(el.tagName)) continue;
-    let t = ''; for (const n of el.childNodes) if (n.nodeType === 3) t += n.textContent;
+    let t = ''; for (const n of el.childNodes) if (n.nodeType === 3) t += n.textContent + ' ';
     t = t.trim().replace(/\s+/g, ' '); if (!t) continue;
     const r = el.getBoundingClientRect();
     if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.right < 0 || r.top > H || r.left > W) continue;
     if (el.checkVisibility && !el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true, opacityProperty: true, visibilityProperty: true })) continue;
     seen++; if (parts.length < 120) parts.push(t.slice(0, 40));
     if (/^\d{1,3}\s*\/\s*\d{1,3}$/.test(t)) { if (!counter) counter = t.replace(/\s+/g, ''); continue; }  // 쪽수 표시는 제목 후보에서 뺀다
+    const inChrome = !!el.closest('header,footer,nav');  // 위아래에 늘 떠 있는 줄(머리말·꼬리말)은 제목 후보에서 뺀다
+    if (!inChrome && !head && /^H[1-3]$/.test(el.tagName)) head = t;
     const fs = parseFloat(w.getComputedStyle(el).fontSize) || 0;
-    if (!best || fs > best.fs) best = { fs, t };
+    if (!inChrome && (!best || fs > best.fs)) best = { fs, t };
   }
-  const title = best ? best.t.slice(0, 24) : '';
+  const title = (head || (best ? best.t : '')).slice(0, 24);
   return { sig: parts.join('|'), title, counter, key: counter || title };
 }
 async function quietScan(max = 1500, step = 220) {  // 화면이 잠잠해질 때까지 기다렸다가 읽는다
@@ -885,14 +888,25 @@ $('newImgIn').onchange = e => {
 };
 
 // ── 글자 수정 (더블클릭)
+// 앱이 이 요소의 "진짜 글"을 data-t 같은 속성에 따로 두고 나중에 그 값으로 되돌리는 경우를 찾는다 (글자 길이가 같은 data-* 속성)
+function finalText(t) {
+  const len = h => { const x = document.createElement('template'); x.innerHTML = h; return x.content.textContent.replace(/\s+/g, ' ').trim().length; };
+  const cur = len(t.innerHTML);
+  for (const a of t.attributes) if (/^data-/.test(a.name) && !/^data-hs-/.test(a.name) && a.value.length >= 2 && /[가-힣A-Za-z]/.test(a.value) && len(a.value) === cur) return { attr: a.name, html: a.value };
+  return null;
+}
 function startEdit(t) {
   if (t === doc.body || t === doc.documentElement) return;
   select(t);
+  const fin = finalText(t);
+  if (t._t) clearInterval(t._t);                               // 앱이 글자를 흩뜨리는 중이면 멈추고
+  if (fin && t.innerHTML !== fin.html) t.innerHTML = fin.html;   // 진짜 글을 보여 준 다음 고친다
   const s = pathOf(t); snap(s); ch[s] = ent(s, t);
   t.contentEditable = 'true'; t.focus(); editing = t;
   t.addEventListener('blur', () => {
     t.removeAttribute('contenteditable'); editing = null;
-    if (t.innerHTML === orig.get(s).html) delete ch[s].html; else ch[s].html = t.innerHTML;
+    if (t.innerHTML === orig.get(s).html) { delete ch[s].html; delete ch[s].da; if (fin) t.setAttribute(fin.attr, orig.get(s).html); }
+    else { ch[s].html = t.innerHTML; if (fin) { t.setAttribute(fin.attr, t.innerHTML); ch[s].da = [fin.attr, t.innerHTML]; } }  // 앱이 나중에 되돌릴 값도 같이 바꾼다
     upd();
   }, { once: true });
 }
@@ -1401,6 +1415,7 @@ function overlayRuntime(E) {
         if (e.add) { if (!document.querySelector('[data-hs-id="' + e.id + '"]')) el.insertAdjacentHTML('beforeend', e.add); return; }
         if (e.css) e.css.forEach(function (c) { el.style.setProperty(c[0], c[1], 'important'); });
         if (e.src != null && el.getAttribute('src') !== e.src) el.setAttribute('src', e.src);
+        if (e.da && el.getAttribute(e.da[0]) !== e.da[1]) el.setAttribute(e.da[0], e.da[1]);  // 앱이 글을 되돌릴 때 쓰는 값도 같이 바꾼다
         if (e.h != null && el.innerHTML !== e.h && norm(el.innerHTML) === e.o && (el.__hs = (el.__hs || 0) + 1) < 8) el.innerHTML = e.h;  // 앱이 글을 되돌리면 다시 입힌다
       });
     } finally { busy = false; }
@@ -1430,7 +1445,7 @@ function build() {
       info.miss++;
       const entry = { s: sel }, css = cssText(e);
       if (css) entry.css = pairs(css);
-      if (e.html != null && o) { entry.h = e.html; entry.o = textOf(o.html); }
+      if (e.html != null && o) { entry.h = e.html; entry.o = textOf(o.html); if (e.da) entry.da = e.da; }
       if (e.src != null) entry.src = e.src;
       if (entry.css || entry.h != null || entry.src != null) { ov.push(entry); info.viaOverlay++; }
       if (e.gf) addFontLink(d, e.gf);
@@ -1440,6 +1455,7 @@ function build() {
     const t = o.style + cssText(e);
     if (t) el.setAttribute('style', t);
     if (e.html != null) el.innerHTML = e.html;
+    if (e.da) el.setAttribute(e.da[0], e.da[1]);
     if (e.src != null) el.setAttribute('src', e.src);
     if (e.gf) addFontLink(d, e.gf);
   }
