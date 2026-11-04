@@ -167,7 +167,7 @@ footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#
   <aside id="panel"></aside>
 </main>
 <div id="tl"></div>
-<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.24 (2026-11-05)</footer>
+<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.25 (2026-11-05)</footer>
 <div id="toast"></div>
 <input type="file" id="fileIn" accept=".html,.htm" hidden>
 <input type="file" id="imgIn" accept="image/*" hidden>
@@ -488,6 +488,7 @@ async function buildNav(manual) {
     for (let k = 0, m2 = 0; k < list.length + 3 && m2 < 2 && scanPage().key !== list[0].key; k++) { if (!await pressDir(-1, 900, 2)) m2++; }
     await quietScan(1500, 150);
   }
+  detectSlides();  // 처음에는 슬라이드가 아직 나타나는 중이라 못 찾았을 수 있으니, 다 만든 지금 다시 찾는다
   const grp = cands.find(c => c.k.length === list.length && c.k.every(x => x.isConnected));  // 같은 개수의 슬라이드 묶음이 있으면 제목은 거기서 정확히
   if (grp) list.forEach((x, i) => { const t = slideTitle(grp.k[i]); if (t && t !== '(빈 화면)') x.title = t; });
   nav.mode = 'walk'; nav.building = false; nav.msg = ''; nav.idx = syncIdx(0); renderTree();
