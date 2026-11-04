@@ -167,7 +167,7 @@ footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#
   <aside id="panel"></aside>
 </main>
 <div id="tl"></div>
-<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.19 (2026-11-05)</footer>
+<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.20 (2026-11-05)</footer>
 <div id="toast"></div>
 <input type="file" id="fileIn" accept=".html,.htm" hidden>
 <input type="file" id="imgIn" accept="image/*" hidden>
@@ -184,7 +184,7 @@ let ch = {};              // 선택자 -> {tx, ty, css:{}, html, src}
 let undo = [];
 let group = [];           // Shift+클릭으로 여러 개 고른 요소 (cur 포함, 2개 이상일 때만 사용)
 const G = () => group.length > 1 ? group : cur ? [cur] : [];
-let nav = { mode: '', list: [], idx: 0, building: false, msg: '', cancel: false }, navTok = 0, navBusy = false, syncT = 0, elemOpen = false;  // 슬라이드 목록: mode 'walk'(앱의 방향키로 넘겨 가며 만든 목록) / 'group'(찾아낸 슬라이드 묶음)
+let nav = { mode: '', list: [], idx: 0, building: false, msg: '', cancel: false, jumpFn: undefined }, navTok = 0, navBusy = false, syncT = 0, elemOpen = false;  // 슬라이드 목록: mode 'walk'(앱의 방향키로 넘겨 가며 만든 목록) / 'group'(찾아낸 슬라이드 묶음)
 let forceAttr = false;  // 이 묶음은 클래스로 안 넘어가서 편집기 임시 속성으로만 넘긴다
 let slides = [], slideCls = '';  // 슬라이드 모음(한 번에 하나만 보이는 형제들)과 "지금 보이는 것"을 표시하는 클래스
 let kf = {}, kName = '', kSel = 0, phPct = null, kdrag = null;  // 키프레임 수정본 / 선택한 애니메이션 이름 / 선택한 키프레임 / 재생헤드(%) / 끌기 상태
@@ -192,9 +192,9 @@ const cardOpen = {}, galState = {};  // 동작 카드가 펼쳐져 있는지(이
 let ptab = 'style', mpause = false, advOpen = false, seqOn = true;  // 패널 탭 / 모션 멈춤 / 고급(타임라인) 펼침 / 여러 개 차례대로  // 오른쪽 패널 탭 / 편집 중 모션 멈춤
 let adds = [];            // 새로 넣은 요소 {parent 선택자, html, el}. 삭제는 요소를 지우지 않고 숨겨 두었다가(경로가 안 밀리게) 저장할 때 제거한다
 
-function toast(t) {
+function toast(t, ms = 2600) {
   const el = $('toast'); el.textContent = t; el.style.display = 'block';
-  clearTimeout(toast.t); toast.t = setTimeout(() => el.style.display = 'none', 2600);
+  clearTimeout(toast.t); toast.t = setTimeout(() => el.style.display = 'none', ms);
 }
 
 // ── 선택자: id가 유일하면 #id, 아니면 body부터 nth-child 경로
@@ -432,7 +432,7 @@ function syncIdx(guess) {  // 지금 화면이 목록의 몇 번째인지
 }
 async function buildNav(manual) {
   const tok = ++navTok, myDoc = doc, alive = () => tok === navTok && doc === myDoc && !nav.cancel;
-  nav = { mode: '', list: [], idx: 0, building: true, msg: '슬라이드 목록을 만들고 있어요…', cancel: false };
+  nav = { mode: '', list: [], idx: 0, building: true, msg: '슬라이드 목록을 만들고 있어요…', cancel: false, jumpFn: undefined };
   renderTree();
   await sleep(manual ? 100 : 900);
   if (tok !== navTok || doc !== myDoc) return;
@@ -468,6 +468,25 @@ async function buildNav(manual) {
   nav.mode = 'walk'; nav.building = false; nav.msg = ''; nav.idx = syncIdx(0); renderTree();
   toast(`슬라이드 ${list.length}개를 찾았어요. 왼쪽 목록에서 누르면 바로 이동해요`);
 }
+async function tryJump(k) {  // 앱이 go(번호) 같은 이동 함수를 갖고 있으면 그것을 불러 한 번에 이동한다 (실제로 그 장이 맞는지 확인)
+  const win = f.contentWindow, want = nav.list[k].key;
+  let names = [nav.jumpFn];
+  if (!nav.jumpFn) {
+    const bf = document.createElement('iframe'); bf.style.display = 'none'; document.body.appendChild(bf);
+    const base = new Set(Object.getOwnPropertyNames(bf.contentWindow)); bf.remove();
+    const mine = Object.getOwnPropertyNames(win).filter(n => !base.has(n) && typeof win[n] === 'function' && win[n].length === 1);
+    const pri = ['go', 'goto', 'goTo', 'gotoSlide', 'goToSlide', 'showSlide', 'show', 'jump', 'jumpTo', 'setSlide', 'toSlide', 'navigate', 'gotoPage', 'goPage'];
+    names = [...pri.filter(n => mine.includes(n)), ...mine.filter(n => /^(go|goto|jump|show|slide|page|nav|to|set)/i.test(n) && !pri.includes(n))].slice(0, 8);
+  }
+  for (const name of names) {
+    if (typeof win[name] !== 'function') continue;
+    try { win[name](k); } catch { continue; }
+    await sleep(100);
+    if ((await quietScan(1500, 150)).key === want) { nav.jumpFn = name; return true; }
+  }
+  nav.jumpFn = null;  // 쓸 만한 이동 함수가 없다 → 한 장씩 넘기기로
+  return false;
+}
 async function navGo(k) {
   if (nav.building || navBusy) return;
   if (nav.mode === 'group') return showSlide(k);
@@ -475,6 +494,7 @@ async function navGo(k) {
   navBusy = true; editing && editing.blur(); select(null);
   try {  // 한 장씩 누르며 매번 장이 바뀌었는지 확인한다 (전환 연출이 긴 장은 만들 때 잰 시간만큼 더 기다린다)
     let c = syncIdx(nav.idx), fails = 0;
+    if (c !== k && nav.jumpFn !== null && await tryJump(k)) { nav.idx = syncIdx(k); return; }
     for (let guard = Math.abs(k - c) + 8; c !== k && guard-- > 0 && fails < 3;) {
       const dir = k > c ? 1 : -1, exp = (nav.list[dir > 0 ? c + 1 : c] || {}).ms || 0;
       const r = await pressDir(dir, Math.max(1200, exp * 1.6 + 600), 1);
@@ -1367,34 +1387,39 @@ $('fileIn').onchange = e => { if (e.target.files[0]) load(e.target.files[0]); e.
 // 저장용 HTML: 원본을 다시 파싱해 변경을 적용 (스크립트가 만든 요소는 못 찾아 건너뜀)
 // 저장용 HTML: 원본을 다시 파싱해 변경을 적용한다.
 //  ① 원본 파일 안에 그 요소가 있으면 그 자리를 직접 고친다
-//  ② 앱이 화면을 스크립트로 만들어서(원본 파일에는 없는 요소) 못 찾으면: 모양 수정은 CSS 규칙으로, 글 수정은 스크립트 속 같은 글을 찾아 바꾼다
-//  ③ 그것도 안 되는 수정(새로 넣은 요소, 그림 교체, 애매한 글)은 저장하지 못한 것으로 세어 알려 준다
+//  ② 앱이 화면을 스크립트로 만들어서(원본 파일에는 없는 요소) 못 찾으면: 파일 맨 아래에 작은 "덧입히기" 스크립트를 넣는다.
+//     열 때마다 앱이 화면을 다 만든 뒤 그 자리(경로)를 찾아 수정한 모양·글·그림을 입힌다 (새로 넣은 요소도 같은 방식)
+function overlayRuntime(E) {
+  var T = 0, busy = false;
+  var norm = function (h) { var t = document.createElement('template'); t.innerHTML = h; return t.content.textContent.replace(/\s+/g, ' ').trim(); };
+  function apply() {
+    if (busy) return; busy = true;
+    try {
+      E.forEach(function (e) {
+        var el = null; try { el = document.querySelector(e.s); } catch (x) { }
+        if (!el) return;
+        if (e.add) { if (!document.querySelector('[data-hs-id="' + e.id + '"]')) el.insertAdjacentHTML('beforeend', e.add); return; }
+        if (e.css) e.css.forEach(function (c) { el.style.setProperty(c[0], c[1], 'important'); });
+        if (e.src != null && el.getAttribute('src') !== e.src) el.setAttribute('src', e.src);
+        if (e.h != null && el.innerHTML !== e.h && norm(el.innerHTML) === e.o && (el.__hs = (el.__hs || 0) + 1) < 8) el.innerHTML = e.h;  // 앱이 글을 되돌리면 다시 입힌다
+      });
+    } finally { busy = false; }
+  }
+  new MutationObserver(function () { clearTimeout(T); T = setTimeout(apply, 40); }).observe(document.body, { childList: true, subtree: true });
+  apply(); addEventListener('load', apply);
+}
+const OVERLAY_JS = '(' + overlayRuntime.toString() + ')(__DATA__);';
 function build() {
   const d = new DOMParser().parseFromString(src, 'text/html');
-  const info = { miss: 0, viaCss: 0, viaText: 0, lost: 0 };
-  const dels = [], rules = [];
-  const segs = h => { const t = document.createElement('template'); t.innerHTML = h; const out = [], w = document.createTreeWalker(t.content, NodeFilter.SHOW_TEXT); for (let n; (n = w.nextNode());) out.push(n.nodeValue); return out; };
-  const textOf = h => segs(h).join('').replace(/\s+/g, ' ').trim();
-  const scripts = [...d.querySelectorAll('script:not([src])')];
-  const patchScript = (a, b) => {  // 스크립트 속에 a 가 딱 한 번 있으면 b 로 바꾼다 (따옴표·역슬래시는 그 글줄의 따옴표에 맞춰 이스케이프)
-    const hit = scripts.filter(sc => sc.textContent.includes(a));
-    if (hit.length !== 1 || hit[0].textContent.split(a).length !== 2) return false;
-    const t = hit[0].textContent, k = t.indexOf(a);
-    let q = ''; for (let x = k - 1; x >= 0 && t[x] !== '\n'; x--) if ('\'"`'.includes(t[x]) && t[x - 1] !== '\\') { q = t[x]; break; }
-    let nb = b.replace(/\\/g, '\\\\'); if (q) nb = nb.split(q).join('\\' + q); nb = nb.replace(/\n/g, '\\n');
-    hit[0].textContent = t.slice(0, k) + nb + t.slice(k + a.length);
-    return true;
-  };
-  const patchText = (oldH, newH) => {  // true 저장됨 / false 못 함 / null 글 변화 없음
-    let A = segs(oldH), B = segs(newH);
-    if (A.length !== B.length) { A = [A.join('')]; B = [B.join('')]; }
-    let any = false, ok = true;
-    A.forEach((x, n) => { const a = x.trim(), b = B[n].trim(); if (a === b) return; any = true; if (a.length < 2 || !patchScript(a, b)) ok = false; });
-    return any ? ok : null;
-  };
+  const info = { miss: 0, viaOverlay: 0, lost: 0 };
+  const dels = [], ov = [];
+  const textOf = h => { const t = document.createElement('template'); t.innerHTML = h; return t.content.textContent.replace(/\s+/g, ' ').trim(); };
+  const pairs = css => css.split(';').map(x => x.trim()).filter(Boolean).map(x => { const k = x.indexOf(':'); return [x.slice(0, k).trim(), x.slice(k + 1).trim()]; });
+  let addId = 0;
   for (const a of adds) {
-    const p = d.querySelector(a.parent);
-    if (p) p.insertAdjacentHTML('beforeend', a.html); else { info.miss++; info.lost++; }
+    let p = null; try { p = d.querySelector(a.parent); } catch { }
+    if (p) p.insertAdjacentHTML('beforeend', a.html);
+    else { info.miss++; info.viaOverlay++; const id = 'a' + (++addId); ov.push({ s: a.parent, add: a.html.replace(/^<(\w+)/, `<$1 data-hs-id="${id}"`), id }); }
   }
   for (const sel in ch) {
     let el = null; try { el = d.querySelector(sel); } catch { }
@@ -1403,10 +1428,11 @@ function build() {
     else if (el && o && textOf(el.innerHTML) !== textOf(o.html)) el = null;  // 같은 자리에 다른 요소가 있으면(앱이 화면을 바꿈) 잘못 고치지 않는다
     if (!el) {
       info.miss++;
-      const css = cssText(e);
-      if (css) { rules.push(`${sel}{${css.split(';').filter(Boolean).map(x => x + '!important').join(';')}}`); info.viaCss++; }
-      if (e.html != null && o) { const r = patchText(o.html, e.html); if (r === true) info.viaText++; else if (r === false) info.lost++; }
-      if (e.src != null) info.lost++;
+      const entry = { s: sel }, css = cssText(e);
+      if (css) entry.css = pairs(css);
+      if (e.html != null && o) { entry.h = e.html; entry.o = textOf(o.html); }
+      if (e.src != null) entry.src = e.src;
+      if (entry.css || entry.h != null || entry.src != null) { ov.push(entry); info.viaOverlay++; }
       if (e.gf) addFontLink(d, e.gf);
       continue;
     }
@@ -1418,18 +1444,25 @@ function build() {
     if (e.gf) addFontLink(d, e.gf);
   }
   dels.forEach(el => el.remove());  // 경로가 밀리지 않도록 마지막에 한꺼번에
-  if (rules.length) { const st = d.createElement('style'); st.setAttribute('data-editor', 'edits'); st.textContent = '\n' + rules.join('\n') + '\n'; d.head.appendChild(st); }
   if (Object.keys(kf).length) { const k = d.createElement('style'); k.setAttribute('data-editor', 'keyframes'); k.textContent = '\n' + kfCss() + '\n'; d.head.appendChild(k); }  // 같은 이름 @keyframes 중 마지막이 이긴다
+  if (ov.length) { const sc = d.createElement('script'); sc.setAttribute('data-editor', 'overlay'); sc.textContent = '\n' + OVERLAY_JS.replace('__DATA__', () => JSON.stringify(ov).replace(/</g, '\\u003c')) + '\n'; d.body.appendChild(sc); }
   const dt = (src.match(/^\s*<!doctype[^>]*>/i) || [''])[0];
   return { out: (dt + (dt ? '\n' : '') + d.documentElement.outerHTML).replace(/ data-hs-(on|off)=""/g, ''), ...info };
 }
-// 저장 결과를 알려 준다: 다 저장 / 일부는 다른 방식으로 저장 / 저장 못 한 것이 있음(눈에 띄게 알림창)
+// 저장 결과를 알려 준다 (몇 개를 어떤 방식으로 저장했는지)
 function saveReport(r, verb) {
   const n = Object.keys(ch).length + adds.length;
-  if (!n && !Object.keys(kf).length) return toast(verb + ' (바꾼 내용이 없어서 원본과 같아요)');
-  if (r.lost) alert(`${verb}. 그런데 수정 ${r.lost}개는 파일에 넣지 못했어요.\n\n이 파일은 화면을 스크립트가 직접 만들어서, 새로 넣은 요소·그림 교체·일부 글 수정은 원본 파일에서 위치를 찾을 수 없어요.\n(🩺 "문제 알려주기"를 눌러 알려 주시면 맞춰 볼게요)` + (r.viaCss || r.viaText ? `\n\n나머지 수정은 저장됐어요 (모양 ${r.viaCss}개, 글 ${r.viaText}개).` : ''));
-  else if (r.miss) toast(`${verb} · 앱이 화면을 만드는 부분이라 모양 ${r.viaCss}개, 글 ${r.viaText}개는 다른 방식으로 넣었어요`);
-  else toast(verb);
+  if (!n && !Object.keys(kf).length) return toast(verb + ' (바꾼 내용이 없어서 원본과 같아요)', 6000);
+  const how = r.viaOverlay ? ` · 이 파일은 앱이 화면을 스크립트로 만들어서 ${r.viaOverlay}개는 "덧입히기"(파일 맨 아래 작은 스크립트)로 저장했어요` : '';
+  toast(`${verb} · 수정 ${n}개 반영${how}`, 9000);
+}
+// 다른 이름으로 저장 (바로 저장이 안 될 때 마지막 수단)
+async function saveAs(out) {
+  if (!window.showSaveFilePicker) return false;
+  const h = await showSaveFilePicker({ suggestedName: fname.replace(/(\.[^.]+)?$/, '-수정$1') || '수정본.html', types: [{ description: 'HTML', accept: { 'text/html': ['.html', '.htm'] } }] });
+  const w = await h.createWritable(); await w.write(out); await w.close();
+  handle = h; lastMod = (await h.getFile()).lastModified; fname = h.name; $('fname').textContent = fname;
+  return true;
 }
 function download(text, name) {
   const a = document.createElement('a');
@@ -1438,23 +1471,33 @@ function download(text, name) {
 }
 $('bSave').onclick = async () => {
   if (!src) return toast('먼저 HTML을 열어 주세요');
-  if (!handle) return toast('이 브라우저는 직접 저장이 안 돼요. "새 파일로 받기"를 쓰세요');
+  if (!handle) return alert('이 파일은 "파일에 저장"을 쓸 수 없는 방식으로 열렸어요.\n"HTML 열기" 버튼으로 다시 열거나, "새 파일로 받기"를 쓰세요.');
+  const permP = handle.requestPermission ? handle.requestPermission({ mode: 'readwrite' }) : Promise.resolve('granted');  // 클릭 직후 바로 요청해야 허락창이 뜬다
+  let r = null;
   try {
+    if ((await permP) !== 'granted') return alert('파일에 쓰는 것을 허락해 주셔야 저장돼요.\n다시 "파일에 저장"을 누르고 "허용"(또는 "변경 사항 저장")을 선택해 주세요.');
     const now = await handle.getFile();
     if (now.lastModified !== lastMod && !confirm('열어둔 뒤에 파일이 바뀌었어요(다른 곳에서 수정됨). 그래도 덮어쓸까요?')) return;
-    if (!backedUp) { download(src, fname.replace(/(\.[^.]+)?$/, '.bak$1')); backedUp = true; }
-    if (handle.requestPermission && (await handle.requestPermission({ mode: 'readwrite' })) !== 'granted') return alert('파일에 쓰는 것을 허락해 주셔야 저장돼요. 다시 눌러서 "허용"을 선택해 주세요. (아니면 "새 파일로 받기"를 쓰세요)');
-    const r = build();
+    r = build();
     const w = await handle.createWritable(); await w.write(r.out); await w.close();
-    lastMod = (await handle.getFile()).lastModified;
-    saveReport(r, '저장했어요 (원본은 .bak 으로 내려받았어요)');
-  } catch (e) { alert('저장하지 못했어요: ' + e.message + '\n\n"새 파일로 받기"로 받은 뒤 원래 파일을 바꿔 주세요.'); }
+    const back = await handle.getFile();
+    if ((await back.text()).length !== r.out.length) throw new Error('저장한 파일을 다시 읽어 보니 내용이 달라요');
+    lastMod = back.lastModified;
+    if (!backedUp) { download(src, fname.replace(/(\.[^.]+)?$/, '.bak$1')); backedUp = true; }  // 처음 한 번, 원본을 .bak 으로 내려받아 둔다
+    saveReport(r, `"${fname}"에 저장했어요 (${(back.size / 1024).toFixed(1)}KB)`);
+  } catch (e) {
+    if (!r) r = build();
+    if (confirm(`바로 저장하지 못했어요 (${e.name}: ${e.message}).\n\n대신 "다른 이름으로 저장" 창을 열까요? (취소하면 수정본을 내려받아요)`)) {
+      try { if (await saveAs(r.out)) return saveReport(r, `"${fname}"에 저장했어요`); } catch (e2) { if (e2.name === 'AbortError') return; }
+    }
+    download(r.out, fname.replace(/(\.[^.]+)?$/, '-수정$1')); saveReport(r, '수정본을 내려받았어요');
+  }
 };
 $('bDown').onclick = () => {
   if (!src) return toast('먼저 HTML을 열어 주세요');
   const r = build();
   download(r.out, fname.replace(/(\.[^.]+)?$/, '-수정$1'));
-  saveReport(r, '받았어요');
+  saveReport(r, '수정본을 내려받았어요');
 };
 
 // ── 변경목록 복사 (Claude에게 붙여넣을 짧은 요약)
