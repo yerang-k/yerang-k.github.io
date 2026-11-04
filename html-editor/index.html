@@ -28,7 +28,6 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 .q4{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
 .q4>div{min-width:0}
 .q4 span{display:block;font-size:11px;color:#999;white-space:nowrap}
-#panel{overflow-x:hidden}
 #panel .q4 input{width:100%}
 .tg.on{background:#d8c3a5;color:#111;border-color:#d8c3a5}
 #panel h4{margin-top:14px}
@@ -46,13 +45,39 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 #tree .tr.on i{color:#333}
 #panel .ptabs{margin:0 0 10px}#panel .ptabs button{flex:1}
 #panel .mcard{border:1px solid #444;border-radius:8px;padding:8px;margin:8px 0}
-#panel{width:250px;overflow:auto;padding:12px;background:#222226;border-left:1px solid #333}
+#panel{width:290px;overflow-y:auto;overflow-x:hidden;padding:12px;background:#222226;border-left:1px solid #333;box-sizing:border-box}
+#panel *{min-width:0;box-sizing:border-box}
 #panel h4{margin:0 0 8px;font-size:13px;color:#d8c3a5}
 #panel label{display:flex;justify-content:space-between;align-items:center;margin:8px 0;gap:8px}
-#panel select{width:140px;background:#111;color:#eee;border:1px solid #444;border-radius:4px;padding:3px}
-#panel input[type=number]{width:80px;background:#111;color:#eee;border:1px solid #444;border-radius:4px;padding:3px}
+#panel select{width:150px;max-width:100%;background:#111;color:#eee;border:1px solid #444;border-radius:4px;padding:3px}
+#panel input[type=number]{width:72px;background:#111;color:#eee;border:1px solid #444;border-radius:4px;padding:3px}
 #panel input[type=color]{width:50px;height:26px;padding:0;border:0;background:none}
-#sel{font-size:11px;color:#999;word-break:break-all;margin-bottom:8px}
+#panel .who{font-size:16px;font-weight:700;color:#fff;margin:2px 0 8px}
+#panel .who small{display:block;font-weight:400;color:#9a9aa0;font-size:12px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#panel .qa{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 4px}
+#panel .qa button{flex:1 1 auto;padding:5px 8px}
+#panel details.sec{border:1px solid #3a3a40;border-radius:10px;margin:10px 0;background:#26262b}
+#panel details.sec>summary{padding:9px 12px;font-weight:700;color:#d8c3a5;cursor:pointer;list-style:none}
+#panel details.sec>summary::-webkit-details-marker{display:none}
+#panel details.sec>summary::before{content:'▸ ';color:#888}
+#panel details.sec[open]>summary::before{content:'▾ '}
+#panel details.sec>.body{padding:0 12px 10px}
+#panel .lbl{font-size:12px;color:#aaa;margin:10px 0 2px}
+#panel .lbl small{color:#888}
+#panel .tools{display:flex;gap:4px;flex-wrap:wrap;margin:6px 0}
+#panel .tools button{padding:4px 9px;min-width:34px}
+#panel .tools .sp{width:6px}
+#panel .stepper{display:flex;gap:4px;align-items:center}
+#panel .stepper input[type=number]{width:62px}
+#panel .stepper button{padding:2px 9px}
+#panel .sw{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:4px 0}
+#panel .sw button{width:26px;height:26px;border-radius:50%;padding:0;border:2px solid #666}
+#panel .sw button.none{background:#111;color:#ccc;font-size:12px}
+#panel .sw input[type=color]{width:34px}
+#panel .seg2{display:flex;gap:4px;margin:6px 0}
+#panel .seg2 button{flex:1;padding:4px 2px}
+#panel .q4 span{font-size:11px;color:#999}
+#panel .q4 input{width:100%}
 .row{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
 .hint{color:#999;font-size:13px}
 #tl{display:none;background:#222226;border-top:1px solid #333;padding:8px 12px}
@@ -122,7 +147,7 @@ footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#
   <aside id="panel"></aside>
 </main>
 <div id="tl"></div>
-<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.12 (2026-11-04)</footer>
+<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.13 (2026-11-04)</footer>
 <div id="toast"></div>
 <input type="file" id="fileIn" accept=".html,.htm" hidden>
 <input type="file" id="imgIn" accept="image/*" hidden>
@@ -505,6 +530,8 @@ function moveToMargin() {
   if (!n) { undo.pop(); return toast('이동한 요소가 없어요'); }
   upd(); fill(); toast(`${n}개를 바깥 여백으로 바꿨어요`);
 }
+const secOpen = { txt: true, bg: true, sp: false, al: true, img: true };  // 패널 구역이 열려 있는지 (다시 그려도 기억)
+panel.addEventListener('mousedown', e => { if (editing && e.target.closest('button')) e.preventDefault(); });  // 글자를 고치는 중에는 버튼을 눌러도 드래그한 선택이 풀리지 않게
 const tabsHtml = () => `<div class="row ptabs">${[['style', '모양'], ['motion', '모션']].map(([k, t]) => `<button class="tg${ptab === k ? ' on' : ''}" data-pt="${k}">${t}</button>`).join('')}</div>`;
 const bindTabs = () => panel.querySelectorAll('[data-pt]').forEach(b => b.onclick = () => { ptab = b.dataset.pt; pend = false; fill(); });
 function fill() {
@@ -514,34 +541,44 @@ function fill() {
   if (ptab === 'motion') return fillMotion();
   const cs = getComputedStyle(cur), tag = cur.tagName.toLowerCase(), many = group.length > 1;
   const pxv = k => Math.round((parseFloat(cs.getPropertyValue(k)) || 0) * 10) / 10;
-  const q4 = pre => ['top', 'right', 'bottom', 'left'].map((d, i) => `<div><span>${['위', '오른', '아래', '왼'][i]}</span><input type="number" data-k="${pre}-${d}" data-u="px" value="${pxv(pre + '-' + d)}"></div>`).join('');
+  const KO = { h1: '큰 제목', h2: '제목', h3: '소제목', h4: '소제목', h5: '소제목', h6: '소제목', p: '문단', span: '글자 조각', div: '상자', img: '그림', button: '버튼', a: '링크', ul: '목록', ol: '번호 목록', li: '목록 항목', section: '구역', header: '머리말 구역', footer: '꼬리말 구역', main: '본문 구역', nav: '메뉴 구역', table: '표', tr: '표의 줄', td: '표의 칸', th: '표의 칸', b: '굵은 글', strong: '굵은 글', i: '기울인 글', em: '기울인 글', canvas: '캔버스', svg: '그림(SVG)', input: '입력칸', label: '이름표', br: '줄바꿈', mark: '형광펜 글', u: '밑줄 글' };
+  const snippet = ((cur.innerText || cur.textContent || '').trim().replace(/\s+/g, ' ')).slice(0, 24);
+  const q4 = pre => ['top', 'right', 'bottom', 'left'].map((d, i) => `<div><span>${['위', '오른쪽', '아래', '왼쪽'][i]}</span><input type="number" data-k="${pre}-${d}" data-u="px" value="${pxv(pre + '-' + d)}"></div>`).join('');
   const lh = cs.lineHeight === 'normal' ? 1.2 : Math.round(parseFloat(cs.lineHeight) / parseFloat(cs.fontSize) * 100) / 100;
-  const tg = (k, on, off, isOn, label) => `<button class="tg${isOn ? ' on' : ''}" data-tk="${k}" data-on="${on}" data-off="${off}">${label}</button>`;
-  const al = a => `<button class="tg${(cs.textAlign === a || (a === 'left' && cs.textAlign === 'start') || (a === 'right' && cs.textAlign === 'end')) ? ' on' : ''}" data-al="${a}">${{ left: '◀ 왼쪽', center: '■ 가운데', right: '오른쪽 ▶' }[a]}</button>`;
-  panel.innerHTML = tabsHtml() + `<h4>${many ? `${group.length}개 선택됨 (Shift+클릭으로 추가/해제)` : `&lt;${tag}&gt; 선택됨`}</h4><div id="sel">${pathOf(cur)}</div>
-  <div class="row"><button id="pUp">↑ 부모 선택</button><button id="pHide">숨기기</button><button id="pDel">삭제</button><button id="pDup">복제</button><button id="pReset">원래대로</button></div>
-  ${many ? `<h4>정렬</h4><div class="row">${[['l', '⬅ 왼쪽'], ['hc', '↔ 가로 가운데'], ['r', '오른쪽 ➡'], ['t', '⬆ 위'], ['vc', '↕ 세로 가운데'], ['b', '⬇ 아래'], ['dh', '가로 균등'], ['dv', '세로 균등']].map(([k, t]) => `<button data-ali="${k}">${t}</button>`).join('')}</div>` : ''}
-  <h4>바깥 여백 (margin)</h4><div class="q4">${q4('margin')}</div>
-  <div class="row"><button id="pMv" title="끌어서 옮긴 위치를 정식 여백으로 바꿔 저장해요">끌어서 옮긴 위치 → 여백으로 확정</button></div>
-  <h4>안쪽 여백 (padding)</h4><div class="q4">${q4('padding')}</div>
-  ${/flex|grid/.test(cs.display) ? `<label>칸 사이 간격(px) <input type="number" data-k="gap" data-u="px" value="${pxv('row-gap')}"></label>` : ''}
-  <h4>글자 서식</h4>
-  <div class="row">${tg('font-weight', 700, 400, +cs.fontWeight >= 600, '<b>B</b>')}${tg('font-style', 'italic', 'normal', cs.fontStyle === 'italic', '<i>I</i>')}${tg('text-decoration', 'underline', 'none', cs.textDecorationLine.includes('underline'), '<u>U</u>')}</div>
-  <div class="row">${al('left')}${al('center')}${al('right')}</div>
-  <label>굵기 <select data-k="font-weight">${[[300, '가늘게'], [400, '보통'], [500, '중간'], [700, '굵게'], [900, '아주 굵게']].map(([v, t]) => `<option value="${v}" ${+cs.fontWeight === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
-  <label>줄 간격(배) <input type="number" step="0.1" min="0.8" data-k="line-height" value="${lh}"></label>
-  <label>자간(px) <input type="number" step="0.5" data-k="letter-spacing" data-u="px" value="${cs.letterSpacing === 'normal' ? 0 : pxv('letter-spacing')}"></label>
-  <h4>모양</h4>
-  <label>글꼴 <select id="pFont">${FONTS.map((x, i) => `<option value="${i}" ${(ch[pathOf(cur)] || {}).gf === x[2] ? 'selected' : ''}>${x[0]}</option>`).join('')}</select></label>
-  <label>글자색 <input type="color" data-k="color" value="${hex(cs.color)}"></label>
-  <label>배경색 <input type="color" data-k="background-color" value="${hex(cs.backgroundColor)}"></label>
-  <label>글자 크기(px) <input type="number" data-k="font-size" data-u="px" value="${parseFloat(cs.fontSize)}"></label>
-  <label>둥글기(px) <input type="number" data-k="border-radius" data-u="px" value="${parseFloat(cs.borderRadius) || 0}"></label>
-  <label>투명도 <input type="range" min="0" max="1" step="0.05" data-k="opacity" value="${cs.opacity}"></label>
-  ${tag === 'img' ? '<div class="row"><button id="pImg">이미지 바꾸기</button></div>' : ''}`;
+  const lines = cs.textDecorationLine;
+  const tg = (k, on, label, title) => `<button class="tg${on ? ' on' : ''}" data-fmt="${k}" title="${title}" aria-label="${title}">${label}</button>`;
+  const al = a => `<button class="tg${(cs.textAlign === a || (a === 'left' && cs.textAlign === 'start') || (a === 'right' && cs.textAlign === 'end')) ? ' on' : ''}" data-al="${a}">${{ left: '왼쪽', center: '가운데', right: '오른쪽' }[a]}</button>`;
+  const swatches = (attr, list, none) => list.map(c => `<button data-${attr}="${c}" style="background:${c}" aria-label="${c}"></button>`).join('') + (none ? `<button class="none" data-${attr}="" aria-label="지우기" title="지우기">✕</button>` : '');
+  const TXT = ['#111111', '#d32f2f', '#1565c0', '#2e7d32', '#ef6c00', '#8e24aa', '#ffffff'], HL = ['#fff176', '#c5f27a', '#9be7ff', '#ffb3d1', '#ffd180'];
+  const sh = cs.boxShadow === 'none' ? 'n' : /0\.18/.test(cs.boxShadow) ? 's' : 'g';
+  const sec = (key, title, body) => `<details class="sec" data-sec="${key}" ${secOpen[key] ? 'open' : ''}><summary>${title}</summary><div class="body">${body}</div></details>`;
+  panel.innerHTML = tabsHtml() + `<div class="who">${many ? `${group.length}개를 골랐어요` : esc(KO[tag] || tag)}${snippet && !many ? `<small>“${esc(snippet)}”</small>` : ''}</div>
+  <div class="qa"><button id="pUp" title="이것을 감싸고 있는 바깥 요소를 골라요">↑ 바깥 것</button><button id="pDup">복제</button><button id="pHide">숨기기</button><button id="pDel">삭제</button><button id="pReset" title="이 요소에 한 수정을 모두 취소해요">처음 모양</button></div>
+  ${many ? sec('al', '맞추기', `<div class="tools">${[['l', '왼쪽 맞춤'], ['hc', '가로 가운데'], ['r', '오른쪽 맞춤'], ['t', '위 맞춤'], ['vc', '세로 가운데'], ['b', '아래 맞춤'], ['dh', '가로 같은 간격'], ['dv', '세로 같은 간격']].map(([k, t]) => `<button data-ali="${k}">${t}</button>`).join('')}</div>`) : ''}
+  ${sec('txt', '글자', `
+    <label>글꼴 <select id="pFont">${FONTS.map((x, i) => `<option value="${i}" ${(ch[pathOf(cur)] || {}).gf === x[2] ? 'selected' : ''}>${x[0]}</option>`).join('')}</select></label>
+    <label>크기 <span class="stepper"><button data-step="-2" aria-label="작게">−</button><input type="number" min="1" data-k="font-size" data-u="px" value="${Math.round(parseFloat(cs.fontSize))}"><button data-step="2" aria-label="크게">＋</button></span></label>
+    <div class="tools">${tg('bold', +cs.fontWeight >= 600, '<b>가</b>', '굵게')}${tg('italic', cs.fontStyle === 'italic', '<i>가</i>', '기울임')}${tg('underline', lines.includes('underline'), '<u>가</u>', '밑줄')}${tg('strike', lines.includes('line-through'), '<s>가</s>', '취소선')}<span class="sp"></span>${al('left')}${al('center')}${al('right')}</div>
+    <div class="lbl">글자색</div><div class="sw">${swatches('fc', TXT, false)}<input type="color" data-k="color" value="${hex(cs.color)}" aria-label="글자색 직접 고르기" title="다른 색 고르기"></div>
+    <div class="lbl">형광펜 <small>(글자를 더블클릭해 고치는 중에 드래그한 부분에 칠해요. 그냥 누르면 전체에 칠해요)</small></div><div class="sw">${swatches('hl', HL, true)}</div>`)}
+  ${sec('bg', '배경·테두리', `
+    <label>배경색 <span class="stepper"><input type="color" data-k="background-color" value="${hex(cs.backgroundColor)}" aria-label="배경색"><button id="pBgNone">없음</button></span></label>
+    <label>테두리 <span class="stepper"><input type="number" min="0" max="20" data-bw value="${pxv('border-top-width')}" aria-label="테두리 두께(px)"><input type="color" data-bc value="${hex(cs.borderTopColor)}" aria-label="테두리 색"></span></label>
+    <label>모서리 둥글기 <input type="number" min="0" data-k="border-radius" data-u="px" value="${parseFloat(cs.borderRadius) || 0}"></label>
+    <div class="lbl">그림자</div><div class="seg2">${[['n', '없음'], ['s', '약하게'], ['g', '진하게']].map(([k, t]) => `<button class="tg${sh === k ? ' on' : ''}" data-sh="${k}">${t}</button>`).join('')}</div>
+    <label class="sl">투명도 <input type="range" min="0" max="1" step="0.05" data-k="opacity" value="${cs.opacity}"></label>`)}
+  ${sec('sp', '간격·위치', `
+    <label>줄 간격(배) <input type="number" step="0.1" min="0.8" data-k="line-height" value="${lh}"></label>
+    <label>글자 사이(px) <input type="number" step="0.5" data-k="letter-spacing" data-u="px" value="${cs.letterSpacing === 'normal' ? 0 : pxv('letter-spacing')}"></label>
+    <div class="lbl">안쪽 여백(px)</div><div class="q4">${q4('padding')}</div>
+    <div class="lbl">바깥 여백(px)</div><div class="q4">${q4('margin')}</div>
+    ${/flex|grid/.test(cs.display) ? `<label>칸 사이 간격(px) <input type="number" data-k="gap" data-u="px" value="${pxv('row-gap')}"></label>` : ''}
+    <div class="row"><button id="pMv" title="끌어서 옮긴 위치를 정식 여백으로 바꿔 저장해요">끌어서 옮긴 위치를 여백으로 확정</button></div>`)}
+  ${tag === 'img' ? sec('img', '그림', '<div class="row"><button id="pImg">다른 그림으로 바꾸기</button></div>') : ''}`;
   bindTabs();
+  panel.querySelectorAll('details.sec').forEach(d => d.ontoggle = () => secOpen[d.dataset.sec] = d.open);
   panel.querySelectorAll('[data-k]').forEach(i => {
-    i.oninput = () => setCss(i.dataset.k, i.value + (i.dataset.u || ''));
+    i.oninput = () => { if (i.value !== '') setCss(i.dataset.k, i.value + (i.dataset.u || '')); };
     i.onchange = () => pend = false;
   });
   $('pFont').onchange = e => {
@@ -554,12 +591,46 @@ function fill() {
     }
     upd();
   };
-  panel.querySelectorAll('[data-tk]').forEach(b => b.onclick = () => {  // B / I / U 켜고 끄기
-    pend = false; setCss(b.dataset.tk, b.classList.contains('on') ? b.dataset.off : b.dataset.on); pend = false; fill();
+  const ranged = () => editing && !doc.getSelection().isCollapsed;  // 글자를 고치는 중이고 드래그로 고른 부분이 있으면 그 부분에만 적용
+  const exec = (cmd, val) => { doc.execCommand('styleWithCSS', false, true); doc.execCommand(cmd, false, val); };
+  panel.querySelectorAll('[data-step]').forEach(b => b.onclick = () => { pend = false; setCss('font-size', Math.max(1, Math.round(parseFloat(getComputedStyle(cur).fontSize)) + +b.dataset.step) + 'px'); pend = false; fill(); });
+  panel.querySelectorAll('[data-fmt]').forEach(b => b.onclick = () => {  // 굵게·기울임·밑줄·취소선
+    const k = b.dataset.fmt;
+    if (ranged()) return exec({ bold: 'bold', italic: 'italic', underline: 'underline', strike: 'strikeThrough' }[k]);
+    const c = getComputedStyle(cur), L = new Set(c.textDecorationLine.split(' ').filter(x => x && x !== 'none'));
+    pend = false;
+    if (k === 'bold') setCss('font-weight', +c.fontWeight >= 600 ? 400 : 700);
+    else if (k === 'italic') setCss('font-style', c.fontStyle === 'italic' ? 'normal' : 'italic');
+    else { const w = k === 'underline' ? 'underline' : 'line-through'; L.has(w) ? L.delete(w) : L.add(w); setCss('text-decoration', [...L].join(' ') || 'none'); }
+    pend = false; fill();
   });
   panel.querySelectorAll('[data-al]').forEach(b => b.onclick = () => { pend = false; setCss('text-align', b.dataset.al); pend = false; fill(); });
+  panel.querySelectorAll('[data-fc]').forEach(b => b.onclick = () => { if (ranged()) return exec('foreColor', b.dataset.fc); pend = false; setCss('color', b.dataset.fc); pend = false; fill(); });
+  panel.querySelectorAll('[data-hl]').forEach(b => b.onclick = () => {  // 형광펜
+    const c = b.dataset.hl;
+    if (ranged()) return exec('hiliteColor', c || 'transparent');
+    if (editing) return toast('칠할 글자를 마우스로 드래그해서 고른 다음 눌러요');
+    const els = G(); snapG(els);
+    for (const el of els) {  // 전체: 안쪽 글을 형광펜 칸 하나로 감싼다 (글자 길이만큼만 칠해진다)
+      const s = pathOf(el); ch[s] = ent(s, el);
+      let h = el.innerHTML.replace(/^<span data-hl[^>]*>([\s\S]*)<\/span>$/, '$1');
+      if (c) h = `<span data-hl style="background:${c};border-radius:.2em;padding:0 .15em;-webkit-box-decoration-break:clone;box-decoration-break:clone">${h}</span>`;
+      ch[s].html = h; render(s);
+    }
+    upd();
+  });
+  $('pBgNone').onclick = () => { pend = false; setCss('background-color', 'transparent'); pend = false; fill(); };
+  panel.querySelectorAll('[data-bw]').forEach(i => {
+    i.oninput = () => { const v = Math.max(0, +i.value || 0); setCss('border-width', v + 'px'); setCss('border-style', v > 0 ? 'solid' : 'none'); };
+    i.onchange = () => { pend = false; fill(); };
+  });
+  panel.querySelectorAll('[data-bc]').forEach(i => {
+    i.oninput = () => { setCss('border-color', i.value); if (!(parseFloat(getComputedStyle(cur).borderTopWidth) > 0)) { setCss('border-width', '2px'); setCss('border-style', 'solid'); } };
+    i.onchange = () => { pend = false; fill(); };
+  });
+  panel.querySelectorAll('[data-sh]').forEach(b => b.onclick = () => { pend = false; setCss('box-shadow', { n: 'none', s: '0 2px 8px rgba(0,0,0,.18)', g: '0 6px 18px rgba(0,0,0,.35)' }[b.dataset.sh]); pend = false; fill(); });
   panel.querySelectorAll('[data-ali]').forEach(b => b.onclick = () => alignGroup(b.dataset.ali));
-  $('pMv').onclick = moveToMargin;
+  if ($('pMv')) $('pMv').onclick = moveToMargin;
   $('pUp').onclick = () => { const p = cur.parentElement; if (p && p !== doc.body) select(p); };
   $('pHide').onclick = () => { pend = false; setCss('display', 'none'); pend = false; };
   $('pDel').onclick = delEl;
