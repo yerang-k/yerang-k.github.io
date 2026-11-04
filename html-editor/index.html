@@ -167,7 +167,7 @@ footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#
   <aside id="panel"></aside>
 </main>
 <div id="tl"></div>
-<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.16 (2026-11-05)</footer>
+<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.17 (2026-11-05)</footer>
 <div id="toast"></div>
 <input type="file" id="fileIn" accept=".html,.htm" hidden>
 <input type="file" id="imgIn" accept="image/*" hidden>
@@ -373,9 +373,10 @@ function slideTitle(sl) {
 }
 // ── 슬라이드 목록: 앱이 방향키(←→)로 넘어가는 슬라이드면, 그 키를 앱에 직접 보내 한 장씩 넘겨 보며 목록(제목)을 만든다.
 //    목록에서 번호를 누르면 같은 방식으로 그 장까지 넘겨 준다. 키로 안 넘어가는 앱은 찾아낸 슬라이드 묶음(탭·화면)으로 목록을 만든다
+//    "한 장 넘어갔다"의 기준(key): 화면에 "3 / 15" 같은 쪽수 표시가 있으면 그 숫자, 없으면 가장 큰 글자(제목). 움직이는 글자·장식은 장이 바뀐 것으로 치지 않는다
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-function scanPage() {  // 지금 화면에 보이는 글자(서명)와 제목(가장 큰 글자)
-  const w = doc.defaultView, W = doc.documentElement.clientWidth, H = doc.documentElement.clientHeight, parts = []; let best = null;
+function scanPage() {  // 지금 화면에 보이는 글자(sig), 제목(가장 큰 글자), 쪽수 표시(counter)
+  const w = doc.defaultView, W = doc.documentElement.clientWidth, H = doc.documentElement.clientHeight, parts = []; let best = null, counter = '';
   for (const el of doc.body.querySelectorAll('*')) {
     if (parts.length >= 80) break;
     if (SKIP.test(el.tagName)) continue;
@@ -385,10 +386,12 @@ function scanPage() {  // 지금 화면에 보이는 글자(서명)와 제목(�
     if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.right < 0 || r.top > H || r.left > W) continue;
     if (el.checkVisibility && !el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true, opacityProperty: true, visibilityProperty: true })) continue;
     parts.push(t.slice(0, 40));
+    if (!counter && /^\d{1,3}\s*\/\s*\d{1,3}$/.test(t)) counter = t.replace(/\s+/g, '');
     const fs = parseFloat(w.getComputedStyle(el).fontSize) || 0;
     if (!best || fs > best.fs) best = { fs, t };
   }
-  return { sig: parts.join('|'), title: best ? best.t.slice(0, 24) : '' };
+  const title = best ? best.t.slice(0, 24) : '';
+  return { sig: parts.join('|'), title, counter, key: counter || title };
 }
 async function quietScan(max = 1500, step = 220) {  // 화면이 잠잠해질 때까지 기다렸다가 읽는다
   let a = scanPage();
@@ -396,7 +399,7 @@ async function quietScan(max = 1500, step = 220) {  // 화면이 잠잠해질 �
   return a;
 }
 function sendKey(k) {
-  const code = { ArrowLeft: 37, ArrowRight: 39 }[k];
+  const code = { ArrowLeft: 37, ArrowRight: 39, Home: 36 }[k];
   for (const type of ['keydown', 'keyup']) {
     const e = new KeyboardEvent(type, { key: k, code: k, bubbles: true, cancelable: true });
     Object.defineProperty(e, 'keyCode', { get: () => code }); Object.defineProperty(e, 'which', { get: () => code });
@@ -411,19 +414,18 @@ function findNavBtn(dir) {  // 키가 안 먹는 앱의 "다음/이전" 버튼
   }
   return null;
 }
-async function pressDir(dir, timeout = 1200, fast) {  // 한 단계 넘기고, 화면이 바뀌면 {바뀐 화면, 걸린 시간 ms} 를 돌려준다 (안 바뀌면 null)
-  const before = scanPage().sig, t0 = performance.now();
+// 한 단계 넘기고, "장이 바뀌면" {바뀐 화면, 걸린 시간 ms} 를 돌려준다 (안 바뀌면 null). fast: 1 = 짧게 잠잠해질 때까지, 2 = 바로
+async function pressDir(dir, timeout = 1200, fast) {
+  const s0 = scanPage(), t0 = performance.now();
   sendKey(dir > 0 ? 'ArrowRight' : 'ArrowLeft');
-  while (performance.now() - t0 < timeout) {
-    await sleep(120);
-    if (scanPage().sig !== before) { const ms = Math.round(performance.now() - t0); return { ...await (fast ? quietScan(700, 150) : quietScan()), ms }; }
-  }
+  const done = async (s, extra) => ({ ...(fast === 2 ? s : await (fast ? quietScan(700, 150) : quietScan())), ms: Math.round(performance.now() - t0) + (extra || 0) });
+  while (performance.now() - t0 < timeout) { await sleep(120); const s = scanPage(); if (s.key !== s0.key) return done(s); }
   const btn = findNavBtn(dir);
-  if (btn) { const was = live; live = true; btn.click(); live = was; await sleep(500); if (scanPage().sig !== before) return { ...await quietScan(), ms: Math.round(performance.now() - t0) }; }
+  if (btn) { const was = live; live = true; btn.click(); live = was; await sleep(500); const s = scanPage(); if (s.key !== s0.key) return done(s); }
   return null;
 }
 function syncIdx(guess) {  // 지금 화면이 목록의 몇 번째인지
-  const s = scanPage().sig, hits = nav.list.map((x, i) => x.sig === s ? i : -1).filter(i => i >= 0);
+  const k = scanPage().key, hits = nav.list.map((x, i) => x.key === k ? i : -1).filter(i => i >= 0);
   if (!hits.length) return guess ?? nav.idx;
   return guess == null ? hits[0] : hits.reduce((a, b) => Math.abs(b - guess) < Math.abs(a - guess) ? b : a);
 }
@@ -439,29 +441,28 @@ async function buildNav(manual) {
   const fallback = () => { nav.building = false; nav.mode = slides.length ? 'group' : ''; nav.msg = ''; renderTree(); };
   if (!manual && !deckish) return fallback();
   editing && editing.blur(); select(null);
-  const list = [{ sig: first.sig, title: first.title }];
-  let r = await pressDir(1, 3500);  // 첫 누름은 전환 연출이 있을 수 있어 오래 기다린다
-  if (!r) r = await pressDir(1, 1500);
+  const list = [{ key: first.key, sig: first.sig, title: first.title }];
+  let r = await pressDir(1, 3500, 1);  // 첫 누름은 전환 연출이 있을 수 있어 오래 기다린다
+  if (!r) r = await pressDir(1, 1500, 1);
   if (!r) return alive() ? fallback() : undefined;
-  list.push({ sig: r.sig, title: r.title, ms: r.ms });
+  list.push({ key: r.key, sig: r.sig, title: r.title, ms: r.ms });
+  const counted = !!first.counter;
   let miss = 0, looped = false;
   while (list.length < 200 && alive()) {
     nav.msg = `${list.length}번째 슬라이드까지 읽었어요…`; renderTree();
-    r = await pressDir(1, 1200, true);
+    r = await pressDir(1, miss ? 900 : 1200, 1);
     if (!r) { if (++miss >= 2) break; continue; }
     miss = 0;
-    if (r.sig === list[0].sig) { looped = true; break; }  // 처음으로 돌아옴 = 끝
-    list.push({ sig: r.sig, title: r.title, ms: r.ms });
+    if (r.key === list[0].key && (counted || r.sig === list[0].sig)) { looped = true; break; }  // 처음으로 돌아옴 = 끝
+    list.push({ key: r.key, sig: r.sig, title: r.title, ms: r.ms });
   }
   if (tok !== navTok || doc !== myDoc) return;
   nav.list = list;
-  if (!looped) {  // 처음으로 되돌아간다
+  if (!looped) {  // 처음으로 되돌아간다 (Home 키를 먼저 시험하고, 안 되면 ← 로 한 장씩)
     nav.msg = '처음 화면으로 돌아가는 중…'; renderTree();
-    let m2 = 0;
-    for (let k = 0; k < list.length + 3 && m2 < 2; k++) {
-      if (scanPage().sig === list[0].sig) break;
-      const rr = await pressDir(-1, 1200, true); if (!rr) m2++;
-    }
+    sendKey('Home'); await sleep(500);
+    for (let k = 0, m2 = 0; k < list.length + 3 && m2 < 2 && scanPage().key !== list[0].key; k++) { if (!await pressDir(-1, 900, 2)) m2++; }
+    await quietScan(1500, 150);
   }
   nav.mode = 'walk'; nav.building = false; nav.msg = ''; nav.idx = syncIdx(0); renderTree();
   toast(`슬라이드 ${list.length}개를 찾았어요. 왼쪽 목록에서 누르면 바로 이동해요`);
@@ -471,11 +472,11 @@ async function navGo(k) {
   if (nav.mode === 'group') return showSlide(k);
   if (nav.mode !== 'walk') return;
   navBusy = true; editing && editing.blur(); select(null);
-  try {  // 한 장씩 누르며 매번 화면이 바뀌었는지 확인한다 (전환 연출이 긴 장은 만들 때 잰 시간만큼 더 기다린다)
+  try {  // 한 장씩 누르며 매번 장이 바뀌었는지 확인한다 (전환 연출이 긴 장은 만들 때 잰 시간만큼 더 기다린다)
     let c = syncIdx(nav.idx), fails = 0;
     for (let guard = Math.abs(k - c) + 8; c !== k && guard-- > 0 && fails < 3;) {
       const dir = k > c ? 1 : -1, exp = (nav.list[dir > 0 ? c + 1 : c] || {}).ms || 0;
-      const r = await pressDir(dir, Math.max(1200, exp * 1.6 + 600), true);
+      const r = await pressDir(dir, Math.max(1200, exp * 1.6 + 600), 1);
       if (!r) { fails++; c = syncIdx(c); continue; }
       fails = 0; c = syncIdx(c + dir);
     }
