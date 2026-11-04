@@ -167,7 +167,7 @@ footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#
   <aside id="panel"></aside>
 </main>
 <div id="tl"></div>
-<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.26 (2026-11-05)</footer>
+<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.27 (2026-11-05)</footer>
 <div id="toast"></div>
 <input type="file" id="fileIn" accept=".html,.htm" hidden>
 <input type="file" id="imgIn" accept="image/*" hidden>
@@ -185,6 +185,7 @@ let undo = [];
 let group = [];           // Shift+클릭으로 여러 개 고른 요소 (cur 포함, 2개 이상일 때만 사용)
 const G = () => group.length > 1 ? group : cur ? [cur] : [];
 let nav = { mode: '', list: [], idx: 0, building: false, msg: '', cancel: false, jumpFn: undefined }, navTok = 0, navBusy = false, syncT = 0, elemOpen = false;  // 슬라이드 목록: mode 'walk'(앱의 방향키로 넘겨 가며 만든 목록) / 'group'(찾아낸 슬라이드 묶음)
+let uniform = null;  // 한 화면에 맞추기(글자 크기 통일): { sel: 모든 슬라이드를 고르는 선택자, rule: CSS 규칙 }
 let forceAttr = false;  // 이 묶음은 클래스로 안 넘어가서 편집기 임시 속성으로만 넘긴다
 let slides = [], slideCls = '';  // 슬라이드 모음(한 번에 하나만 보이는 형제들)과 "지금 보이는 것"을 표시하는 클래스
 let kf = {}, kName = '', kSel = 0, phPct = null, kdrag = null;  // 키프레임 수정본 / 선택한 애니메이션 이름 / 선택한 키프레임 / 재생헤드(%) / 끌기 상태
@@ -459,6 +460,45 @@ function groupOfSize(n) {
   }
   return best && best.k;
 }
+function slideEls() { return (nav.mode === 'walk' && groupOfSize(nav.list.length)) || (slides.length > 1 ? slides : null); }
+function commonSelector(els) {
+  const cands = [pathOf(els[0]).replace(/:nth-child\(\d+\)$/, ''), pathOf(els[0].parentElement) + ' > ' + els[0].tagName.toLowerCase()];
+  for (const sel of cands) { try { const m = [...doc.querySelectorAll(sel)]; if (m.length === els.length && els.every(x => m.includes(x))) return sel; } catch { } }
+  return null;
+}
+// 슬라이드가 "화면 안에 다 들어가는지" (스크롤이 안 생기는지). 가려진 정답 칸(.b/.q)은 다 펼친 가장 긴 상태로 잰다
+function slideFits(s) {
+  const open = [...s.querySelectorAll('.b,.q')], was = open.map(x => x.classList.contains('on')); open.forEach(x => x.classList.add('on'));
+  const hid = doc.defaultView.getComputedStyle(s).display === 'none'; if (hid) s.style.setProperty('display', 'block', 'important');
+  const ok = s.scrollHeight <= s.clientHeight + 1 && s.scrollWidth <= s.clientWidth + 1;
+  if (hid) s.style.removeProperty('display'); open.forEach((x, i) => x.classList.toggle('on', was[i]));
+  return ok;
+}
+function fitAll() {
+  if (!doc) return toast('먼저 HTML을 열어 주세요');
+  const els = slideEls(); if (!els || els.length < 2) return toast('슬라이드를 찾지 못해서 맞출 수 없어요');
+  const sel = commonSelector(els); if (!sel) return toast('이 파일은 슬라이드를 한꺼번에 고를 수 없는 구조예요');
+  let st = doc.getElementById('hs-uniform'); if (!st) { st = doc.createElement('style'); st.id = 'hs-uniform'; doc.head.appendChild(st); }
+  const set = px => { st.textContent = `${sel}{font-size:${px}px!important}`; return els.map(x => x.scrollHeight).join(); };
+  const h1 = set(10), h2 = set(40);
+  if (h1 === h2) { st.textContent = uniform ? uniform.rule : ''; return toast('이 파일은 슬라이드 글자 크기를 한꺼번에 바꿀 수 없는 구조예요 (글자가 em 단위가 아니에요)'); }
+  const bad = px => { set(px); return els.map((x, i) => slideFits(x) ? 0 : i + 1).filter(Boolean); };
+  let lo = 4, hi = 80;
+  const worst = bad(lo);
+  if (worst.length) { st.textContent = uniform ? uniform.rule : ''; return toast(`아주 작은 글자(4px)로도 ${worst.slice(0, 6).join(', ')}번 슬라이드가 화면에 안 들어가요. 글을 줄이거나 나눠야 해요`, 8000); }
+  for (let n = 0; n < 14; n++) { const m = (lo + hi) / 2; bad(m).length ? hi = m : lo = m; }
+  const px = Math.floor(lo * 10) / 10, W = doc.documentElement.clientWidth, H = doc.documentElement.clientHeight, u = Math.min(W / 100, H / 100 * 1.78);
+  const K = Math.round(px / u * 1000) / 1000;
+  const rule = `${sel}{font-size:min(${K}vw,${Math.round(K * 1.78 * 1000) / 1000}vh)!important}`;  // 화면 크기에 비례해 커지고 작아진다 (16:9 기준)
+  st.textContent = rule; uniform = { sel, rule };
+  const left = els.filter(x => !slideFits(x)).length;
+  fill(); upd();
+  toast(`모든 슬라이드의 글자 크기를 하나로 통일했어요 (기준 ${px}px). 스크롤이 생기는 슬라이드: ${left}개 · 저장하면 다른 화면에서도 같은 비율로 보여요`, 9000);
+}
+function fitOff() {
+  const st = doc && doc.getElementById('hs-uniform'); if (st) st.textContent = ''; uniform = null; fill(); upd();
+  toast('슬라이드 글자 크기를 원래대로 돌렸어요 (슬라이드마다 앱이 자동으로 맞춰요)');
+}
 async function buildNav(manual) {
   const tok = ++navTok, myDoc = doc, alive = () => tok === navTok && doc === myDoc && !nav.cancel;
   nav = { mode: '', list: [], idx: 0, building: true, msg: '슬라이드 목록을 만들고 있어요…', cancel: false, jumpFn: undefined };
@@ -615,9 +655,11 @@ function renderTree() {
     $('navPrev').onclick = () => navStep(-1); $('navNext').onclick = () => navStep(1);
     T.querySelectorAll('.si').forEach(b => b.onclick = () => navGo(+b.dataset.k));
   } else T.insertAdjacentHTML('beforeend', '<p class="hint" style="padding:0 10px">슬라이드를 찾지 못했어요. 슬라이드 앱이면 아래 "목록 만들기"를 눌러 보세요.</p>');
+  if (titles.length > 1) T.insertAdjacentHTML('beforeend', `<div class="tools2"><button id="navFit" title="모든 슬라이드의 글자 크기를 같게 하고, 스크롤이 안 생기는 가장 큰 크기로 맞춰요">📐 한 화면에 맞추기</button><button id="navFitOff" ${uniform ? '' : 'disabled'} title="원래대로">↩ 원래 크기</button></div>`);
   T.insertAdjacentHTML('beforeend', `<div class="tools2"><button id="navRebuild" title="앱을 한 장씩 넘겨 보며 목록을 새로 만들어요">↻ ${titles.length ? '목록 다시 만들기' : '목록 만들기'}</button><button id="trDiag" title="화면이 이상할 때 눌러서 대화창에 붙여넣으면 원인을 찾을 수 있어요">🩺 문제 알려주기</button></div>
     <details class="adv" id="elemBox" ${elemOpen ? 'open' : ''}><summary>고급: 요소 목록</summary><div id="elemTree"></div></details>`);
   $('navRebuild').onclick = () => buildNav(true); $('trDiag').onclick = diagnose;
+  if ($('navFit')) { $('navFit').onclick = fitAll; $('navFitOff').onclick = fitOff; }
   $('elemBox').ontoggle = e => { if (e.target.open === elemOpen) return; elemOpen = e.target.open; renderTree(); };
   if (elemOpen) renderElemTree($('elemTree'));
   T.scrollTop = top;
@@ -717,10 +759,17 @@ const hex = c => {
   if (m.length > 3 && +m[3] === 0) return '#ffffff';
   return '#' + m.slice(0, 3).map(n => (+n).toString(16).padStart(2, '0')).join('');
 };
+const EM_PROPS = /^(font-size|margin-(top|right|bottom|left)|padding-(top|right|bottom|left)|gap|row-gap|column-gap|border-radius|letter-spacing)$/;
+function toEm(el, k, v) {  // "24px" → "0.8em" : 글자 크기는 바깥 요소 글자 크기, 나머지는 자기 글자 크기를 기준으로
+  const m = EM_PROPS.test(k) && /^-?[\d.]+px$/.test(String(v)) && String(v).match(/^-?[\d.]+/);
+  if (!m) return v;
+  const w = el.ownerDocument.defaultView, base = parseFloat(w.getComputedStyle(k === 'font-size' && el.parentElement ? el.parentElement : el).fontSize);
+  return base > 0 ? Math.round(parseFloat(m[0]) / base * 1000) / 1000 + 'em' : v;
+}
 function setCss(k, v) {  // 여러 개 선택돼 있으면 전부에 적용
   const els = G(); if (!els.length) return;
   if (!pend) { snapG(els); pend = true; }
-  for (const el of els) { const s = pathOf(el); ch[s] = ent(s, el); ch[s].css[k] = v; render(s); }
+  for (const el of els) { const s = pathOf(el); ch[s] = ent(s, el); ch[s].css[k] = toEm(el, k, v); render(s); }
   gapR = targets(cur).R; upd();
 }
 // 여러 개 정렬 / 균등 간격 (보이는 위치 기준으로 계산해 transform으로 옮긴다)
@@ -1419,7 +1468,7 @@ addEventListener('keydown', onKey);
 function load(file, h) {
   return file.text().then(t => {
     src = t; fname = file.name; handle = h || null; lastMod = file.lastModified; backedUp = false;
-    orig.clear(); ch = {}; undo = []; adds = []; kf = {}; phPct = null; slides = [];
+    orig.clear(); ch = {}; undo = []; adds = []; kf = {}; phPct = null; slides = []; uniform = null;
     $('fname').textContent = fname + (handle ? '' : ' (직접 저장 불가 — 새 파일로 받기 사용)');
     f.srcdoc = src;
   });
@@ -1495,6 +1544,7 @@ function build() {
     if (e.gf) addFontLink(d, e.gf);
   }
   dels.forEach(el => el.remove());  // 경로가 밀리지 않도록 마지막에 한꺼번에
+  if (uniform) { const u = d.createElement('style'); u.setAttribute('data-editor', 'uniform'); u.textContent = '\n' + uniform.rule + '\n'; d.head.appendChild(u); }  // 한 화면에 맞추기(글자 크기 통일)
   if (Object.keys(kf).length) { const k = d.createElement('style'); k.setAttribute('data-editor', 'keyframes'); k.textContent = '\n' + kfCss() + '\n'; d.head.appendChild(k); }  // 같은 이름 @keyframes 중 마지막이 이긴다
   if (ov.length) { const sc = d.createElement('script'); sc.setAttribute('data-editor', 'overlay'); sc.textContent = '\n' + OVERLAY_JS.replace('__DATA__', () => JSON.stringify(ov).replace(/</g, '\\u003c')) + '\n'; d.body.appendChild(sc); }
   const dt = (src.match(/^\s*<!doctype[^>]*>/i) || [''])[0];
@@ -1503,7 +1553,7 @@ function build() {
 // 저장 결과를 알려 준다 (몇 개를 어떤 방식으로 저장했는지)
 function saveReport(r, verb) {
   const n = Object.keys(ch).length + adds.length;
-  if (!n && !Object.keys(kf).length) return toast(verb + ' (바꾼 내용이 없어서 원본과 같아요)', 6000);
+  if (!n && !Object.keys(kf).length && !uniform) return toast(verb + ' (바꾼 내용이 없어서 원본과 같아요)', 6000);
   const how = r.viaOverlay ? ` · 이 파일은 앱이 화면을 스크립트로 만들어서 ${r.viaOverlay}개는 "덧입히기"(파일 맨 아래 작은 스크립트)로 저장했어요` : '';
   toast(`${verb} · 수정 ${n}개 반영${how}`, 9000);
 }
