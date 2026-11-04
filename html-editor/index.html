@@ -120,7 +120,7 @@ footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#
   <aside id="panel"></aside>
 </main>
 <div id="tl"></div>
-<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.8 (2026-11-04)</footer>
+<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.9 (2026-11-04)</footer>
 <div id="toast"></div>
 <input type="file" id="fileIn" accept=".html,.htm" hidden>
 <input type="file" id="imgIn" accept="image/*" hidden>
@@ -265,7 +265,8 @@ function detectSlides() {
     for (const [name, k] of fams) {
       const namey = NAMEY.test(name);
       if (k.length < (namey ? 2 : 3) || !k.every(c => c.tagName === k[0].tagName)) continue;
-      const shown = k.filter(isShown);
+      let shown = k.filter(isOn);  // 등장 모션 때문에 막 열린 장면은 잠깐 투명하므로, 먼저 display 로만 세고 여럿이면 그때 투명도로 가른다
+      if (shown.length > 1) shown = shown.filter(isShown);
       if (shown.length !== 1) continue;
       const score = k.length + (namey ? 6 : 0) + (p === doc.body ? 2 : 0);
       if (!best || score > best.score) best = { k, name, score, sh: shown[0] };
