@@ -185,7 +185,7 @@ footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#
   <aside id="panel"></aside>
 </main>
 <div id="tl"></div>
-<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.30 (2026-11-06)</footer>
+<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.32 (2026-11-06)</footer>
 <div id="toast"></div>
 <input type="file" id="fileIn" accept=".html,.htm" hidden>
 <input type="file" id="imgIn" accept="image/*" hidden>
@@ -455,19 +455,11 @@ function getSlideGroup() {
 const curSlide = () => {
   const all = (slides && slides.length) ? slides : getSlideGroup();
   if (!all || !all.length) return 0;
-  if (typeof slideIdx === 'number' && slideIdx >= 0 && slideIdx < all.length) return slideIdx;
-  const activeIdx = all.findIndex(s => s.classList.contains('active') || s.classList.contains('show') || s.classList.contains('present') || s.hasAttribute('data-hs-on'));
-  if (activeIdx >= 0) return activeIdx;
-  const win = f.contentWindow;
-  if (win) {
-    const W = (doc.documentElement.clientWidth || win.innerWidth) / 2;
-    for (let k = 0; k < all.length; k++) {
-      const r = all[k].getBoundingClientRect();
-      if (r.left <= W && r.right >= W) return k;
-    }
-  }
-  const i = all.findIndex(isShown);
-  return i >= 0 ? i : 0;
+  const forced = all.findIndex(x => x.hasAttribute('data-hs-on')); if (forced >= 0) return forced;
+  if (typeof slideIdx === 'number' && slideIdx >= 0 && slideIdx < all.length && all[slideIdx] && isShown(all[slideIdx])) return slideIdx;
+  const shown = all.map((x, k) => isShown(x) ? k : -1).filter(k => k >= 0);
+  if (shown.length === 1) return shown[0];
+  return typeof slideIdx === 'number' && slideIdx >= 0 && slideIdx < all.length ? slideIdx : 0;
 };
 function slideTitle(sl) {
   const clean = e => { const t = document.createElement('template'); t.innerHTML = ((finalText(e) || {}).html || e.innerHTML).replace(/<br\s*\/?>/gi, ' '); return t.content.textContent.replace(/\s+/g, ' ').trim(); };
@@ -560,6 +552,48 @@ function groupOfSize(n) {  // 슬라이드 수와 같은 개수의 형제 묶음
     }
   }
   return best && best.k;
+}
+function slideEls() { return (nav.mode === 'walk' && groupOfSize(nav.list.length)) || (slides.length > 1 ? slides : null); }
+function commonSelector(els) {
+  const cands = [pathOf(els[0]).replace(/:nth-child\(\d+\)$/, ''), pathOf(els[0].parentElement) + ' > ' + els[0].tagName.toLowerCase()];
+  for (const sel of cands) { try { const m = [...doc.querySelectorAll(sel)]; if (m.length === els.length && els.every(x => m.includes(x))) return sel; } catch { } }
+  return null;
+}
+// 슬라이드가 "화면 안에 다 들어가는지" (스크롤이 안 생기는지). 가려진 정답 칸(.b/.q)은 다 펼친 가장 긴 상태로 잰다
+function slideFits(s) {
+  const open = [...s.querySelectorAll('.b,.q')], was = open.map(x => x.classList.contains('on')); open.forEach(x => x.classList.add('on'));
+  const hid = doc.defaultView.getComputedStyle(s).display === 'none'; if (hid) s.style.setProperty('display', 'block', 'important');
+  const ok = s.scrollHeight <= s.clientHeight + 1 && s.scrollWidth <= s.clientWidth + 1;
+  if (hid) s.style.removeProperty('display'); open.forEach((x, i) => x.classList.toggle('on', was[i]));
+  return ok;
+}
+function fitAll() {
+  if (!doc) return toast('먼저 HTML을 열어 주세요');
+  const els = slideEls(); if (!els || els.length < 2) return toast('슬라이드를 찾지 못해서 맞출 수 없어요');
+  const sel = commonSelector(els); if (!sel) return toast('이 파일은 슬라이드를 한꺼번에 고를 수 없는 구조예요');
+  let st = doc.getElementById('hs-uniform'); if (!st) { st = doc.createElement('style'); st.id = 'hs-uniform'; doc.head.appendChild(st); }
+  clearSlideAttrs();  // 편집기가 숨겨 둔 슬라이드가 있으면 풀고 잰다
+  const heightOf = x => { const hid = doc.defaultView.getComputedStyle(x).display === 'none'; if (hid) x.style.setProperty('display', 'block', 'important'); const v = Math.round([...x.children].reduce((t, c) => t + c.getBoundingClientRect().height, 0)); if (hid) x.style.removeProperty('display'); return v; };
+  const set = px => { st.textContent = `${sel}{font-size:${px}px!important}`; return els.map(heightOf).join(); };  // 안쪽 내용의 실제 높이 (슬라이드가 화면보다 낮아도 글자 크기에 따라 바뀌는지 본다)  // 안쪽 내용의 실제 높이 (슬라이드가 화면보다 낮아도 글자 크기에 따라 바뀌는지 본다)
+  const h1 = set(10), h2 = set(40);
+  if (h1 === h2) { st.textContent = uniform ? uniform.rule : ''; return toast('이 파일은 슬라이드 글자 크기를 한꺼번에 바꿀 수 없는 구조예요 (글자가 em 단위가 아니에요)'); }
+  const bad = px => { set(px); return els.map((x, i) => slideFits(x) ? 0 : i + 1).filter(Boolean); };
+  let lo = 4, hi = 80;
+  const worst = bad(lo);
+  if (worst.length) { st.textContent = uniform ? uniform.rule : ''; return toast(`아주 작은 글자(4px)로도 ${worst.slice(0, 6).join(', ')}번 슬라이드가 화면에 안 들어가요. 글을 줄이거나 나눠야 해요`, 8000); }
+  for (let n = 0; n < 14; n++) { const m = (lo + hi) / 2; bad(m).length ? hi = m : lo = m; }
+  const px = Math.floor(lo * 10) / 10, W = doc.documentElement.clientWidth, H = doc.documentElement.clientHeight, u = Math.min(W / 100, H / 100 * 1.78);
+  const K = Math.round(px / u * 1000) / 1000;
+  const rule = `${sel}{font-size:min(${K}vw,${Math.round(K * 1.78 * 1000) / 1000}vh)!important}`;  // 화면 크기에 비례해 커지고 작아진다 (16:9 기준)
+  st.textContent = rule; uniform = { sel, rule };
+  const left = els.filter(x => !slideFits(x)).length;
+  try { showSlide(slideIdx); } catch { }
+  fill(); upd();
+  toast(`모든 슬라이드의 글자 크기를 하나로 통일했어요 (기준 ${px}px). 스크롤이 생기는 슬라이드: ${left}개 · 저장하면 다른 화면에서도 같은 비율로 보여요`, 9000);
+}
+function fitOff() {
+  const st = doc && doc.getElementById('hs-uniform'); if (st) st.textContent = ''; uniform = null; fill(); upd();
+  toast('슬라이드 글자 크기를 원래대로 돌렸어요 (슬라이드마다 앱이 자동으로 맞춰요)');
 }
 async function buildNav(manual) {
   const tok = ++navTok, myDoc = doc, alive = () => tok === navTok && doc === myDoc && !nav.cancel;
@@ -673,84 +707,40 @@ function diagnose() {
   (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(() => toast('문제 정보를 복사했어요. 대화창에 붙여넣어 주세요'), () => prompt('복사해서 대화창에 붙여넣어 주세요', text));
 }
 function clearSlideAttrs() { doc && doc.querySelectorAll('[data-hs-on],[data-hs-off]').forEach(e => { e.removeAttribute('data-hs-on'); e.removeAttribute('data-hs-off'); }); }
+// 슬라이드로 이동한다. 앱이 아는 "원래 슬라이드"는 앱의 이동 함수(go 등)를 원래 번호로 불러서 앱이 스스로 바꾸게 하고,
+// 편집기에서 새로 넣은 슬라이드(앱은 모름)는 편집기가 직접 "이것만 보이고 나머지는 숨김"으로 보여 준다.
+const isAddedSlide = el => el.hasAttribute('data-hs-add');
+function ensureSlideStyle() {  // [data-hs-on]/[data-hs-off] 를 !important 로 적용하는 규칙 (앱의 클래스·인라인 스타일보다 우선)
+  let st = doc.getElementById('hs-slides'); if (!st) { st = doc.createElement('style'); st.id = 'hs-slides'; doc.head.appendChild(st); }
+  st.textContent = `[data-hs-off]{display:none!important}[data-hs-on]{display:${slideDisp && slideDisp !== 'none' ? slideDisp : 'block'}!important;visibility:visible!important;opacity:1!important}`;
+}
 function showSlide(i) {
-  if (!slides || !slides.length) {
-    const grp = getSlideGroup();
-    if (grp.length) slides = grp;
-    else return;
-  }
+  if (!slides || !slides.length || slidesStale()) { const g = getSlideGroup(); if (g.length) slides = g; else return; }
   i = Math.max(0, Math.min(slides.length - 1, i));
-  slideIdx = i;
-  nav.idx = i;
+  slideIdx = i; nav.idx = i;
   editing && editing.blur(); select(null);
-
-  const target = slides[i];
+  const target = slides[i], win = f.contentWindow;
   if (!target) return;
-  const win = f.contentWindow;
-
-  // 1. Reveal.js 이동
-  if (win && win.Reveal) {
-    try {
-      if (win.Reveal.sync) win.Reveal.sync();
-      if (win.Reveal.slide) win.Reveal.slide(i, 0);
-    } catch {}
-  }
-
-  // 2. 앱 자체 이동 함수 호출 (go, goto, show, showSlide 등)
-  if (win) {
-    const pri = ['go', 'goto', 'goTo', 'gotoSlide', 'goToSlide', 'showSlide', 'show', 'jump', 'jumpTo', 'setSlide', 'toSlide', 'setPage', 'showPage'];
-    for (const fn of pri) {
-      if (typeof win[fn] === 'function') {
-        try { win[fn](i); break; } catch {}
-      }
-    }
-  }
-
-  // 3. 클래스 방식 전환 (Reveal.js 및 표준 슬라이드 클래스)
-  slides.forEach((s, k) => {
-    if (slideCls) s.classList.toggle(slideCls, k === i);
-    s.classList.toggle('present', k === i);
-    s.classList.toggle('past', k < i);
-    s.classList.toggle('future', k > i);
-    if (s.classList.contains('active')) s.classList.toggle('active', k === i);
-    if (s.classList.contains('show')) s.classList.toggle('show', k === i);
-    if (s.classList.contains('on')) s.classList.toggle('on', k === i);
-  });
-
-  // 4. 스크롤 덱(가로 스와이프 슬라이드) 이동 (가장 중요!)
-  try {
-    target.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'start' });
-    const p = target.parentElement;
-    if (p && p.scrollWidth > p.clientWidth) {
-      p.scrollTo({ left: target.offsetLeft, behavior: 'auto' });
-    }
-  } catch {}
-
-  // 5. display:none 기반 슬라이드 처리
-  const isScrollDeck = target.parentElement && (target.parentElement.scrollWidth > target.parentElement.clientWidth || (doc.defaultView && doc.defaultView.getComputedStyle(target.parentElement).overflowX !== 'visible'));
-  if (!isScrollDeck) {
-    slides.forEach((s, k) => {
-      if (k === i) {
-        s.removeAttribute('data-hs-off');
-        s.setAttribute('data-hs-on', '');
-        if (s.style.display === 'none') {
-          s.style.display = (slideDisp && slideDisp !== 'none') ? slideDisp : '';
-        }
-        s.style.visibility = 'visible';
-      } else {
-        s.removeAttribute('data-hs-on');
-        s.setAttribute('data-hs-off', '');
-      }
-    });
-  } else {
-    slides.forEach(s => {
-      s.removeAttribute('data-hs-off');
-      s.removeAttribute('data-hs-on');
-    });
-  }
-
+  const appIdx = slides.filter(x => !isAddedSlide(x)).indexOf(target);  // 앱이 아는 번호 (새로 넣은 슬라이드는 -1)
+  if (appIdx >= 0) {
+    clearSlideAttrs();  // 앱이 직접 보이고 숨기게 한다
+    if (win && win.Reveal && win.Reveal.slide) { try { win.Reveal.slide(appIdx, 0); } catch { } }
+    const fns = ['go', 'goto', 'goTo', 'gotoSlide', 'goToSlide', 'showSlide', 'show', 'jump', 'jumpTo', 'setSlide', 'toSlide', 'setPage', 'showPage'];
+    const name = (nav.jumpFn && typeof win[nav.jumpFn] === 'function' ? nav.jumpFn : fns.find(n => win && typeof win[n] === 'function'));
+    let called = false;
+    if (name) { try { win[name](appIdx); called = true; } catch { } }
+    if (!called && slideCls) slides.forEach((x, k) => x.classList.toggle(slideCls, k === i));
+    // 앱이 안 따라 주면(번호만 바뀌고 화면이 그대로) 편집기가 직접 보이고 숨긴다
+    setTimeout(() => { if (slides[i] === target && slideIdx === i && target.isConnected && !isShown(target)) forceShow(i); }, 450);
+  } else forceShow(i);
+  try { if (!isAddedSlide(target)) target.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch { }
   if (mpause) setTimeout(freezeMotion, 1200);
   upd(); fill();
+}
+function forceShow(i) {
+  ensureSlideStyle();
+  slides.forEach((x, k) => { x.toggleAttribute('data-hs-on', k === i); x.toggleAttribute('data-hs-off', k !== i); });
+  upd();
 }
 function hover(el) {
   const H = $('hov'), r = el && el.isConnected ? el.getBoundingClientRect() : null;
