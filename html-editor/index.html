@@ -144,6 +144,24 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 #panel .mguide{margin:0 0 8px}
 #toast{position:fixed;left:50%;bottom:46px;transform:translateX(-50%);background:#d8c3a5;color:#111;padding:8px 14px;border-radius:8px;display:none;z-index:9}
 footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#111;word-break:keep-all}
+/* 슬라이드 가져오기/교체 모달 */
+#slideModal{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:none;align-items:center;justify-content:center}
+#slideModal .m-box{width:580px;max-width:92vw;max-height:85vh;background:#222226;border:1px solid #444;border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.6);display:flex;flex-direction:column;overflow:hidden;color:#eee}
+#slideModal .m-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #333;background:#1b1b1d}
+#slideModal .m-head h3{margin:0;font-size:15px;color:#d8c3a5}
+#slideModal .m-close{background:none;border:0;color:#aaa;font-size:18px;cursor:pointer;padding:0 4px}
+#slideModal .m-close:hover{color:#fff}
+#slideModal .m-tabs{display:flex;border-bottom:1px solid #333;background:#18181b}
+#slideModal .m-tab{flex:1;padding:10px;background:none;border:0;border-bottom:2px solid transparent;color:#888;cursor:pointer;border-radius:0;font-weight:600}
+#slideModal .m-tab.on{color:#d8c3a5;border-bottom-color:#d8c3a5;background:#222226}
+#slideModal .m-body{flex:1;overflow-y:auto;padding:16px}
+#slideModal .m-list{display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto;margin:10px 0}
+#slideModal .m-item{display:flex;gap:10px;padding:8px 12px;background:#2c2c30;border:1px solid #3a3a40;border-radius:6px;cursor:pointer;text-align:left;color:#eee}
+#slideModal .m-item:hover{background:#36363d;border-color:#555}
+#slideModal .m-item.on{background:#3a3830;border-color:#d8c3a5;color:#fff}
+#slideModal .m-item b{color:#d8c3a5;min-width:24px}
+#slideModal .m-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid #333;background:#1b1b1d}
+#slideModal textarea{width:100%;height:140px;background:#111;color:#eee;border:1px solid #444;border-radius:6px;padding:10px;font:13px/1.4 monospace;box-sizing:border-box;resize:vertical}
 </style>
 </head>
 <body>
@@ -154,7 +172,7 @@ footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#
   <button id="bCopy">변경목록 복사</button>
   <button id="bSave">파일에 저장</button>
   <button id="bDown">새 파일로 받기</button>
-  <select id="bAdd"><option value="">＋ 요소 추가…</option><option value="text">글자</option><option value="btn">버튼</option><option value="box">상자</option><option value="img">이미지</option></select>
+  <select id="bAdd"><option value="">＋ 요소 추가…</option><option value="text">글자</option><option value="btn">버튼</option><option value="box">상자</option><option value="img">이미지</option><option value="slide">새 슬라이드 (Ctrl+M)</option><option value="dup_slide">슬라이드 복제</option><option value="import_slide">슬라이드 가져오기/교체…</option></select>
   <button id="bSnap">🧲 자석·가이드선 켜짐</button>
   <button id="bPause">⏸ 모션 멈춤 꺼짐</button>
   <button id="bLive">👆 작동 모드 꺼짐</button>
@@ -167,11 +185,48 @@ footer{padding:4px 10px;font-size:11px;color:#777;text-align:center;background:#
   <aside id="panel"></aside>
 </main>
 <div id="tl"></div>
-<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.29 (2026-11-05)</footer>
+<footer>학습자료 편집기 © 2026 KIMYERANG. 본 앱은 자유롭게 사용할 수 있으나, 저작자의 허락 없는<br>복제·배포·수정은 금지합니다. · v1.30 (2026-11-06)</footer>
 <div id="toast"></div>
 <input type="file" id="fileIn" accept=".html,.htm" hidden>
 <input type="file" id="imgIn" accept="image/*" hidden>
 <input type="file" id="newImgIn" accept="image/*" hidden>
+<div id="slideModal">
+  <div class="m-box">
+    <div class="m-head">
+      <h3>슬라이드 가져오기 및 교체</h3>
+      <button class="m-close" id="smClose" title="닫기">✕</button>
+    </div>
+    <div style="padding:10px 16px 0;font-size:12px;color:#bbb" id="smTargetInfo"></div>
+    <div class="m-tabs">
+      <button class="m-tab on" id="tabFile">📁 HTML 파일에서 가져오기</button>
+      <button class="m-tab" id="tabCode">📋 HTML 코드 직접 붙여넣기</button>
+    </div>
+    <div class="m-body">
+      <div id="viewFile">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <button id="smPickFile" class="main">HTML 파일 선택…</button>
+          <span id="smFileName" style="font-size:12px;color:#aaa">선택된 파일 없음</span>
+          <input type="file" id="smFileInput" accept=".html,.htm" hidden>
+        </div>
+        <div id="smListWrap" style="display:none">
+          <div style="font-size:12px;color:#aaa;margin-bottom:6px">가져올 슬라이드를 선택해 주세요:</div>
+          <div class="m-list" id="smList"></div>
+        </div>
+        <p id="smFileHint" class="hint" style="margin:8px 0">슬라이드가 포함된 다른 HTML 파일을 선택하면 슬라이드 목록이 나타납니다.</p>
+      </div>
+      <div id="viewCode" style="display:none">
+        <div style="font-size:12px;color:#aaa;margin-bottom:6px">슬라이드 HTML 코드를 붙여넣어 주세요 (&lt;section&gt; 또는 &lt;div&gt;):</div>
+        <textarea id="smCodeInput" placeholder="<section class='slide'>&#10;  <h2>새 슬라이드 제목</h2>&#10;  <p>내용을 입력하세요...</p>&#10;</section>"></textarea>
+      </div>
+    </div>
+    <div class="m-foot">
+      <button id="smBtnCancel">취소</button>
+      <button id="smBtnAppend" style="background:#2c3e50;border-color:#34495e;color:#fff">＋ 현재 슬라이드 뒤에 추가</button>
+      <button id="smBtnReplace" class="main">🔄 현재 슬라이드와 교체</button>
+    </div>
+  </div>
+</div>
+
 
 <script>
 const $ = id => document.getElementById(id);
@@ -261,16 +316,22 @@ function restore(x) { x.prev ? ch[x.s] = JSON.parse(x.prev) : delete ch[x.s]; re
 function doUndo() {
   if (editing) return;
   const u = undo.pop(); if (!u) return toast('되돌릴 게 없어요');
-  if (u.add) {  // 추가한 요소 취소
-    const p = pathOf(u.add.el);
-    orig.delete(p); delete ch[p];
-    if (cur === u.add.el) cur = null;
-    u.add.el.remove(); adds.splice(adds.indexOf(u.add), 1);
-    upd(); fill(); return;
+  if (u.addSlide || u.add) {  // 추가한 슬라이드 또는 요소 취소
+    const a = u.add || adds.find(x => x.el === u.addSlide);
+    if (a) {
+      const p = pathOf(a.el);
+      orig.delete(p); delete ch[p];
+      if (cur === a.el) cur = null;
+      a.el.remove(); const idx = adds.indexOf(a); if (idx >= 0) adds.splice(idx, 1);
+      detectSlides(); renderTree();
+      upd(); fill(); return;
+    }
   }
   if (u.multi) { undo.push(...u.multi); u.multi.forEach(() => doUndo()); return; }
   if (u.kf) { u.prev ? kf[u.kf] = JSON.parse(u.prev) : delete kf[u.kf]; applyKf(); upd(); fill(); return; }
   u.batch ? [...u.batch].reverse().forEach(restore) : restore(u);
+  if (slidesStale()) detectSlides();
+  renderTree();
   upd(); fill();
 }
 function ensureBlock(e, el) {
@@ -368,7 +429,46 @@ function whyHidden(el) {  // 그 요소가 실제로 화면에 보이면 '' , �
   if (!t || el.contains(t) || t.contains(el)) return '';
   return `${t.tagName.toLowerCase()}${t.id ? '#' + t.id : typeof t.className === 'string' && t.className ? '.' + t.className.trim().split(/\s+/)[0] : ''} 에 가려져 있어요`;
 }
-const curSlide = () => { const i = slides.findIndex(isShown); return i >= 0 ? i : Math.min(slideIdx, slides.length - 1); };
+function getSlideGroup() {
+  if (slides && slides.length > 0 && !slidesStale()) return slides;
+  if (!doc || !doc.body) return [];
+  let found = [...doc.querySelectorAll('.reveal .slides > section')];
+  if (found.length >= 2) return found;
+  const deck = doc.querySelector('#deck, .deck, #slides, .slides');
+  if (deck) {
+    const kids = [...deck.children].filter(c => !SKIP.test(c.tagName));
+    if (kids.length >= 2) return kids;
+  }
+  if (nav && nav.list && nav.list.length >= 2) {
+    const grp = groupOfSize(nav.list.length);
+    if (grp && grp.length >= 2) return grp;
+  }
+  for (const p of [doc.body, ...doc.body.querySelectorAll('*')]) {
+    const kids = [...p.children].filter(c => !SKIP.test(c.tagName));
+    if (kids.length >= 2 && kids.length <= 300) {
+      const slideCount = kids.filter(c => /slide|stage|screen|page/i.test(c.className) || c.tagName === 'SECTION').length;
+      if (slideCount >= 2 && slideCount / kids.length >= 0.7) return kids;
+    }
+  }
+  return [];
+}
+const curSlide = () => {
+  const all = (slides && slides.length) ? slides : getSlideGroup();
+  if (!all || !all.length) return 0;
+  if (typeof slideIdx === 'number' && slideIdx >= 0 && slideIdx < all.length) return slideIdx;
+  const activeIdx = all.findIndex(s => s.classList.contains('active') || s.classList.contains('show') || s.classList.contains('present') || s.hasAttribute('data-hs-on'));
+  if (activeIdx >= 0) return activeIdx;
+  const win = f.contentWindow;
+  if (win) {
+    const W = (doc.documentElement.clientWidth || win.innerWidth) / 2;
+    for (let k = 0; k < all.length; k++) {
+      const r = all[k].getBoundingClientRect();
+      if (r.left <= W && r.right >= W) return k;
+    }
+  }
+  const i = all.findIndex(isShown);
+  return i >= 0 ? i : 0;
+};
 function slideTitle(sl) {
   const clean = e => { const t = document.createElement('template'); t.innerHTML = ((finalText(e) || {}).html || e.innerHTML).replace(/<br\s*\/?>/gi, ' '); return t.content.textContent.replace(/\s+/g, ' ').trim(); };
   const h = sl.querySelector('h1,h2,h3,.title'), head = h ? clean(h) : '';
@@ -504,7 +604,7 @@ async function buildNav(manual) {
     await quietScan(1500, 150);
   }
   const grp = groupOfSize(list.length);  // 화면에 보이는지와 상관없이, 슬라이드 수와 같은 개수의 형제 요소 묶음이 있으면 제목은 거기서 정확히 읽는다
-  if (grp) list.forEach((x, i) => { const t = slideTitle(grp[i]); if (t && t !== '(빈 화면)') x.title = t; });
+  if (grp) { list.forEach((x, i) => { const t = slideTitle(grp[i]); if (t && t !== '(빈 화면)') x.title = t; }); slides = grp; slideName = '슬라이드'; }
   nav.mode = 'walk'; nav.building = false; nav.msg = ''; nav.idx = syncIdx(0); renderTree();
   toast(`슬라이드 ${list.length}개를 찾았어요. 왼쪽 목록에서 누르면 바로 이동해요`);
 }
@@ -574,27 +674,83 @@ function diagnose() {
 }
 function clearSlideAttrs() { doc && doc.querySelectorAll('[data-hs-on],[data-hs-off]').forEach(e => { e.removeAttribute('data-hs-on'); e.removeAttribute('data-hs-off'); }); }
 function showSlide(i) {
-  if (slidesStale()) { detectSlides(); fill(); }
-  if (!slides.length) return;
+  if (!slides || !slides.length) {
+    const grp = getSlideGroup();
+    if (grp.length) slides = grp;
+    else return;
+  }
   i = Math.max(0, Math.min(slides.length - 1, i));
-  editing && editing.blur(); select(null);
-  const win = f.contentWindow;
-  const viaClass = slideCls && !forceAttr;
-  if (viaClass) {
-    if (typeof win.show === 'function' && String(win.show).includes(slideCls)) { try { win.show(i); } catch { } }  // 앱의 번호·진행 막대 등도 같이 바뀌게
-    if (!slides[i].classList.contains(slideCls)) slides.forEach((s, k) => s.classList.toggle(slideCls, k === i));
-    // 앱이 자기 상태대로 클래스를 곧바로 되돌려 버리면(번호만 바뀌고 화면이 그대로) 편집기가 직접 보이고 숨기는 방식으로 바꾼다
-    setTimeout(() => {
-      if (slides[i] && slides[i].isConnected && slideIdx === i && (!isShown(slides[i]) || slides.some((s, k) => k !== i && isShown(s)))) { forceAttr = true; showSlide(i); }
-    }, 350);
-  } else slides.forEach((s, k) => { s.toggleAttribute('data-hs-on', k === i); s.toggleAttribute('data-hs-off', k !== i); });
   slideIdx = i;
+  nav.idx = i;
+  editing && editing.blur(); select(null);
+
+  const target = slides[i];
+  if (!target) return;
+  const win = f.contentWindow;
+
+  // 1. Reveal.js 이동
+  if (win && win.Reveal) {
+    try {
+      if (win.Reveal.sync) win.Reveal.sync();
+      if (win.Reveal.slide) win.Reveal.slide(i, 0);
+    } catch {}
+  }
+
+  // 2. 앱 자체 이동 함수 호출 (go, goto, show, showSlide 등)
+  if (win) {
+    const pri = ['go', 'goto', 'goTo', 'gotoSlide', 'goToSlide', 'showSlide', 'show', 'jump', 'jumpTo', 'setSlide', 'toSlide', 'setPage', 'showPage'];
+    for (const fn of pri) {
+      if (typeof win[fn] === 'function') {
+        try { win[fn](i); break; } catch {}
+      }
+    }
+  }
+
+  // 3. 클래스 방식 전환 (Reveal.js 및 표준 슬라이드 클래스)
+  slides.forEach((s, k) => {
+    if (slideCls) s.classList.toggle(slideCls, k === i);
+    s.classList.toggle('present', k === i);
+    s.classList.toggle('past', k < i);
+    s.classList.toggle('future', k > i);
+    if (s.classList.contains('active')) s.classList.toggle('active', k === i);
+    if (s.classList.contains('show')) s.classList.toggle('show', k === i);
+    if (s.classList.contains('on')) s.classList.toggle('on', k === i);
+  });
+
+  // 4. 스크롤 덱(가로 스와이프 슬라이드) 이동 (가장 중요!)
+  try {
+    target.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'start' });
+    const p = target.parentElement;
+    if (p && p.scrollWidth > p.clientWidth) {
+      p.scrollTo({ left: target.offsetLeft, behavior: 'auto' });
+    }
+  } catch {}
+
+  // 5. display:none 기반 슬라이드 처리
+  const isScrollDeck = target.parentElement && (target.parentElement.scrollWidth > target.parentElement.clientWidth || (doc.defaultView && doc.defaultView.getComputedStyle(target.parentElement).overflowX !== 'visible'));
+  if (!isScrollDeck) {
+    slides.forEach((s, k) => {
+      if (k === i) {
+        s.removeAttribute('data-hs-off');
+        s.setAttribute('data-hs-on', '');
+        if (s.style.display === 'none') {
+          s.style.display = (slideDisp && slideDisp !== 'none') ? slideDisp : '';
+        }
+        s.style.visibility = 'visible';
+      } else {
+        s.removeAttribute('data-hs-on');
+        s.setAttribute('data-hs-off', '');
+      }
+    });
+  } else {
+    slides.forEach(s => {
+      s.removeAttribute('data-hs-off');
+      s.removeAttribute('data-hs-on');
+    });
+  }
+
   if (mpause) setTimeout(freezeMotion, 1200);
   upd(); fill();
-  setTimeout(() => {
-    const w = slides[i] && slides[i].isConnected && whyHidden(slides[i]);
-    if (w) toast(`번호는 바꿨지만 화면에서는 안 보여요 (${w}). 팝업이면 앱에서 먼저 닫고(작동 모드), 아니면 왼쪽 목록의 ◀ ▶ 로 넘겨 보세요. 계속 안 되면 "🩺 문제 알려주기"를 눌러 대화창에 붙여넣어 주세요`);
-  }, 400);
 }
 function hover(el) {
   const H = $('hov'), r = el && el.isConnected ? el.getBoundingClientRect() : null;
@@ -613,10 +769,22 @@ function renderTree() {
   const group = nav.mode === 'group', titles = group ? slides.map(slideTitle) : nav.list.map(x => x.title), ci = group ? curSlide() : nav.idx;
   T.insertAdjacentHTML('beforeend', '<h4>슬라이드</h4>');
   if (titles.length) {
-    T.insertAdjacentHTML('beforeend', `<div class="tools2"><button id="navPrev">◀ 이전</button><button id="navNext">다음 ▶</button></div><div class="sli">${titles.map((t, k) => `<button class="si${k === ci ? ' on' : ''}" data-k="${k}" ${k === ci ? 'aria-current="true"' : ''}><b>${k + 1}</b><span>${esc(t || '(제목 없음)')}</span></button>`).join('')}</div>`);
+    T.insertAdjacentHTML('beforeend', `<div class="tools2"><button id="navPrev" title="이전 슬라이드로 이동 (Alt+←)">◀ 이전</button><button id="navNext" title="다음 슬라이드로 이동 (Alt+→)">다음 ▶</button></div>
+<div class="tools2"><button id="bAddSlide" class="main" title="현재 슬라이드 뒤에 새 슬라이드를 추가해요 (Ctrl+M)">＋ 슬라이드 추가</button><button id="bDupSlide" title="현재 슬라이드를 그대로 복제해요">⧉ 복제</button></div>
+<div class="tools2"><button id="bImportSlide" title="다른 HTML 파일 또는 코드에서 슬라이드를 가져와서 교체하거나 추가해요">📂 가져오기/교체</button><button id="bDelSlide" title="현재 슬라이드를 삭제해요" style="color:#ff8a80">🗑 삭제</button></div>
+<div class="sli">${titles.map((t, k) => `<button class="si${k === ci ? ' on' : ''}" data-k="${k}" ${k === ci ? 'aria-current="true"' : ''}><b>${k + 1}</b><span>${esc(t || '(제목 없음)')}</span></button>`).join('')}</div>`);
     $('navPrev').onclick = () => navStep(-1); $('navNext').onclick = () => navStep(1);
-    T.querySelectorAll('.si').forEach(b => b.onclick = () => navGo(+b.dataset.k));
-  } else T.insertAdjacentHTML('beforeend', '<p class="hint" style="padding:0 10px">슬라이드를 찾지 못했어요. 슬라이드 앱이면 아래 "목록 만들기"를 눌러 보세요.</p>');
+    $('bAddSlide').onclick = () => addSlide();
+    $('bDupSlide').onclick = () => duplicateCurrentSlide();
+    $('bImportSlide').onclick = () => openSlideModal();
+    $('bDelSlide').onclick = () => deleteCurrentSlide();
+    T.querySelectorAll('.si').forEach(b => b.onclick = () => { const k = +b.dataset.k; showSlide(k); if (nav.mode === 'walk') try { navGo(k); } catch {} });
+  } else {
+    T.insertAdjacentHTML('beforeend', `<p class="hint" style="padding:0 10px">슬라이드를 찾지 못했어요.</p>
+<div class="tools2"><button id="bInitSlide" class="main">＋ 슬라이드 추가</button><button id="bImportSlideEmpty">📂 가져오기</button></div>`);
+    $('bInitSlide').onclick = () => addSlide();
+    $('bImportSlideEmpty').onclick = () => openSlideModal();
+  }
   if (titles.length > 1) T.insertAdjacentHTML('beforeend', `<div class="tools2"><button id="navFit" title="모든 슬라이드의 글자 크기를 같게 하고, 스크롤이 안 생기는 가장 큰 크기로 맞춰요">📐 한 화면에 맞추기</button><button id="navFitOff" ${uniform ? '' : 'disabled'} title="원래대로">↩ 원래 크기</button></div>`);
   T.insertAdjacentHTML('beforeend', `<div class="tools2"><button id="navRebuild" title="앱을 한 장씩 넘겨 보며 목록을 새로 만들어요">↻ ${titles.length ? '목록 다시 만들기' : '목록 만들기'}</button><button id="trDiag" title="화면이 이상할 때 눌러서 대화창에 붙여넣으면 원인을 찾을 수 있어요">🩺 문제 알려주기</button></div>
     <details class="adv" id="elemBox" ${elemOpen ? 'open' : ''}><summary>고급: 요소 목록</summary><div id="elemTree"></div></details>`);
@@ -924,6 +1092,9 @@ const NEW = {
 $('bAdd').onchange = e => {
   const v = e.target.value; e.target.value = '';
   if (v === 'img') { if (!doc) return toast('먼저 HTML을 열어 주세요'); $('newImgIn').click(); }
+  else if (v === 'slide') addSlide();
+  else if (v === 'dup_slide') duplicateCurrentSlide();
+  else if (v === 'import_slide') openSlideModal();
   else if (NEW[v]) addHtml(NEW[v]);
 };
 $('newImgIn').onchange = e => {
@@ -941,6 +1112,316 @@ function finalText(t) {
   for (const a of t.attributes) if (/^data-/.test(a.name) && !/^data-hs-/.test(a.name) && a.value.length >= 2 && /[가-힣A-Za-z]/.test(a.value) && len(a.value) === cur) return { attr: a.name, html: a.value };
   return null;
 }
+// ── 슬라이드 관리 (추가, 복제, 삭제, 외부 가져오기/교체)
+function addSlide(htmlContent, afterEl) {
+  if (!doc || !doc.body) return toast('먼저 HTML을 열어 주세요');
+  const allSlides = getSlideGroup();
+  const curIdx = curSlide();
+  const refSlide = afterEl || (allSlides.length ? (allSlides[curIdx] || allSlides[allSlides.length - 1]) : null);
+  const parent = refSlide ? refSlide.parentElement : (doc.querySelector('#deck, .deck, .reveal .slides, .slides') || doc.body);
+
+  let newEl;
+  if (htmlContent) {
+    const t = document.createElement('template');
+    t.innerHTML = htmlContent.trim();
+    newEl = t.content.firstElementChild;
+  } else {
+    const tag = refSlide ? refSlide.tagName.toLowerCase() : 'section';
+    newEl = doc.createElement(tag);
+    if (refSlide && refSlide.className) {
+      const activeWords = new Set(['present', 'active', 'current', 'on', 'visible', 'show', slideCls].filter(Boolean));
+      const cleanCls = [...refSlide.classList].filter(c => !activeWords.has(c)).join(' ');
+      newEl.className = cleanCls || 'slide';
+    } else {
+      newEl.className = 'slide';
+    }
+    if (refSlide && refSlide.getAttribute('style')) {
+      newEl.setAttribute('style', refSlide.getAttribute('style'));
+    }
+    newEl.innerHTML = '<div style="padding:40px 20px;text-align:center;box-sizing:border-box"><h2 style="margin:0 0 16px;font-size:32px">새 슬라이드</h2><p style="margin:0;font-size:18px;color:#888">여기를 더블클릭하여 내용을 입력하세요.</p></div>';
+  }
+
+  if (newEl.id && doc.getElementById(newEl.id)) newEl.removeAttribute('id');
+  newEl.querySelectorAll('[id]').forEach(x => {
+    if (doc.getElementById(x.id)) x.removeAttribute('id');
+  });
+
+  const addId = 'add_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+  newEl.setAttribute('data-hs-add', addId);
+
+  if (refSlide && refSlide.parentElement === parent) {
+    refSlide.after(newEl);
+  } else {
+    parent.appendChild(newEl);
+  }
+
+  const refIdx = allSlides.indexOf(refSlide);
+  const targetIdx = refIdx >= 0 ? refIdx + 1 : allSlides.length;
+  allSlides.splice(targetIdx, 0, newEl);
+  slides = allSlides;
+
+  const aftSel = refSlide ? pathOf(refSlide) : null;
+  const a = {
+    parent: parent === doc.body ? 'body' : pathOf(parent),
+    after: aftSel,
+    afterId: refSlide ? refSlide.getAttribute('data-hs-add') : null,
+    addId,
+    html: newEl.outerHTML,
+    el: newEl
+  };
+  adds.push(a);
+  undo.push({ addSlide: newEl, add: a });
+
+  nav.mode = 'group';
+  showSlide(targetIdx);
+  renderTree();
+  toast('새 슬라이드를 추가했어요');
+  return newEl;
+}
+
+function duplicateCurrentSlide() {
+  if (!slides.length) return toast('복제할 슬라이드가 없어요');
+  const curIdx = curSlide();
+  const curEl = slides[curIdx];
+  if (!curEl) return;
+  const clone = curEl.cloneNode(true);
+  clone.removeAttribute('id');
+  clone.querySelectorAll('[id]').forEach(x => x.removeAttribute('id'));
+  clone.removeAttribute('data-hs-on');
+  clone.removeAttribute('data-hs-off');
+  if (slideCls) clone.classList.remove(slideCls);
+  addSlide(clone.outerHTML, curEl);
+  toast(`${curIdx + 1}번 슬라이드를 복제했어요`);
+}
+
+function deleteCurrentSlide() {
+  if (!slides.length) return toast('삭제할 슬라이드가 없어요');
+  if (slides.length <= 1) return toast('슬라이드가 1장뿐이어서 삭제할 수 없어요');
+  const curIdx = curSlide();
+  const curEl = slides[curIdx];
+  if (!confirm(`${curIdx + 1}번째 슬라이드를 정말 삭제할까요?`)) return;
+
+  const s = pathOf(curEl);
+  snap(s);
+  ch[s] = ent(s, curEl);
+  ch[s].del = true;
+  curEl.style.display = 'none';
+
+  const nextIdx = Math.max(0, curIdx - 1);
+  detectSlides();
+  showSlide(nextIdx);
+  renderTree();
+  toast(`${curIdx + 1}번째 슬라이드를 삭제했어요 (Ctrl+Z로 되돌릴 수 있어요)`);
+}
+
+function replaceCurrentSlide(newHtml, sourceDoc) {
+  if (!slides.length) return addSlide(newHtml);
+  const curIdx = curSlide();
+  const curEl = slides[curIdx];
+  if (!curEl) return;
+
+  const t = document.createElement('template');
+  t.innerHTML = newHtml.trim();
+  const importedEl = t.content.firstElementChild;
+  if (!importedEl) return toast('유효한 슬라이드 HTML이 아닙니다');
+
+  const s = pathOf(curEl);
+  snap(s);
+  const entry = ent(s, curEl);
+
+  if (sourceDoc) {
+    sourceDoc.querySelectorAll('link[rel="stylesheet"]').forEach(lnk => {
+      const href = lnk.getAttribute('href');
+      if (href && !doc.querySelector(`link[href="${href}"]`)) {
+        const l = doc.createElement('link');
+        l.rel = 'stylesheet'; l.href = href;
+        doc.head.appendChild(l);
+      }
+    });
+  }
+
+  importedEl.querySelectorAll('[id]').forEach(x => {
+    if (doc.getElementById(x.id) && x.id !== curEl.id) x.removeAttribute('id');
+  });
+
+  const hadActiveCls = slideCls && curEl.classList.contains(slideCls);
+  curEl.innerHTML = importedEl.innerHTML;
+
+  if (importedEl.getAttribute('style')) {
+    curEl.setAttribute('style', importedEl.getAttribute('style'));
+  }
+  if (importedEl.className) {
+    const activeWords = new Set(['present', 'active', 'current', 'on', 'visible', 'show', slideCls].filter(Boolean));
+    const classes = [...importedEl.classList].filter(c => !activeWords.has(c));
+    if (hadActiveCls && slideCls) classes.push(slideCls);
+    curEl.className = classes.join(' ');
+  }
+
+  entry.html = curEl.innerHTML;
+  entry.css = {};
+
+  const win = f.contentWindow;
+  if (win && win.Reveal && win.Reveal.sync) {
+    try { win.Reveal.sync(); win.Reveal.slide(curIdx); } catch {}
+  }
+
+  detectSlides();
+  showSlide(curIdx);
+  renderTree();
+  upd(); fill();
+  toast(`${curIdx + 1}번째 슬라이드를 교체했어요 (Ctrl+Z로 되돌릴 수 있어요)`);
+}
+
+// ── 외부 슬라이드 모달 로직
+let smImportedDoc = null;
+let smSelectedSlide = null;
+let smSlides = [];
+
+function extractSlidesFromDoc(d) {
+  if (!d || !d.body) return [];
+  let found = [...d.querySelectorAll('.reveal .slides > section')];
+  if (!found.length) found = [...d.querySelectorAll('section')];
+  if (!found.length) {
+    found = [...d.querySelectorAll('.slide, .screen, .view, .page, [class*="slide"], [class*="screen"]')];
+  }
+  if (!found.length) {
+    const NAMEY = /slide|screen|view|page|deck|presentation/i;
+    for (const p of [d.body, ...d.body.querySelectorAll('*')]) {
+      const kids = [...p.children].filter(c => !SKIP.test(c.tagName));
+      if (kids.length >= 2 && (NAMEY.test(p.className || '') || NAMEY.test(p.id || ''))) {
+        found = kids; break;
+      }
+    }
+  }
+  if (!found.length) {
+    const kids = [...d.body.children].filter(c => !SKIP.test(c.tagName));
+    if (kids.length >= 1) found = kids;
+  }
+  return found;
+}
+
+function openSlideModal() {
+  if (!doc || !doc.body) return toast('먼저 편집할 HTML 파일을 열어 주세요');
+  const m = $('slideModal');
+  if (!m) return;
+  m.style.display = 'flex';
+
+  const curIdx = curSlide();
+  const curEl = slides[curIdx];
+  const title = curEl ? slideTitle(curEl) : '현재 위치';
+  $('smTargetInfo').innerHTML = `대상: <b>${curIdx + 1}번 슬라이드</b> (${esc(title)})`;
+
+  switchSlideTab('file');
+  $('smFileInput').value = '';
+  $('smFileName').textContent = '선택된 파일 없음';
+  $('smListWrap').style.display = 'none';
+  $('smList').innerHTML = '';
+  $('smFileHint').style.display = 'block';
+  $('smFileHint').textContent = '슬라이드가 포함된 다른 HTML 파일을 선택하면 슬라이드 목록이 나타납니다.';
+  $('smCodeInput').value = '';
+  smImportedDoc = null;
+  smSelectedSlide = null;
+  smSlides = [];
+}
+
+function closeSlideModal() {
+  const m = $('slideModal');
+  if (m) m.style.display = 'none';
+}
+
+function switchSlideTab(tab) {
+  if (tab === 'file') {
+    $('tabFile').classList.add('on');
+    $('tabCode').classList.remove('on');
+    $('viewFile').style.display = 'block';
+    $('viewCode').style.display = 'none';
+  } else {
+    $('tabFile').classList.remove('on');
+    $('tabCode').classList.add('on');
+    $('viewFile').style.display = 'none';
+    $('viewCode').style.display = 'block';
+  }
+}
+
+function onSlideFilePicked(file) {
+  if (!file) return;
+  $('smFileName').textContent = file.name;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const d = new DOMParser().parseFromString(rd.result, 'text/html');
+      smImportedDoc = d;
+      smSlides = extractSlidesFromDoc(d);
+      if (!smSlides.length) {
+        $('smFileHint').textContent = '파일에서 슬라이드를 감지하지 못했습니다. HTML 코드를 직접 붙여넣어 보세요.';
+        $('smFileHint').style.display = 'block';
+        $('smListWrap').style.display = 'none';
+        return;
+      }
+      $('smFileHint').style.display = 'none';
+      $('smListWrap').style.display = 'block';
+      const listEl = $('smList');
+      listEl.innerHTML = '';
+      smSlides.forEach((sl, idx) => {
+        const item = document.createElement('div');
+        item.className = 'm-item' + (idx === 0 ? ' on' : '');
+        const title = slideTitle(sl) || `${idx + 1}번째 슬라이드`;
+        const snippet = (sl.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 50);
+        item.innerHTML = `<b>${idx + 1}</b><div style="flex:1;min-width:0"><div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(title)}</div><div style="font-size:11px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(snippet)}</div></div>`;
+        item.onclick = () => {
+          listEl.querySelectorAll('.m-item').forEach(x => x.classList.remove('on'));
+          item.classList.add('on');
+          smSelectedSlide = sl;
+        };
+        listEl.appendChild(item);
+      });
+      smSelectedSlide = smSlides[0];
+    } catch (err) {
+      alert('파일을 읽는 중 오류가 발생했습니다: ' + err.message);
+    }
+  };
+  rd.readAsText(file);
+}
+
+function getSelectedSlideHtml() {
+  const isFileTab = $('tabFile').classList.contains('on');
+  if (isFileTab) {
+    if (!smSelectedSlide) {
+      toast('가져올 슬라이드를 먼저 목록에서 선택해 주세요');
+      return null;
+    }
+    return { html: smSelectedSlide.outerHTML, doc: smImportedDoc };
+  } else {
+    const code = $('smCodeInput').value.trim();
+    if (!code) {
+      toast('슬라이드 HTML 코드를 입력해 주세요');
+      return null;
+    }
+    return { html: code, doc: null };
+  }
+}
+
+$('smClose').onclick = closeSlideModal;
+$('smBtnCancel').onclick = closeSlideModal;
+$('tabFile').onclick = () => switchSlideTab('file');
+$('tabCode').onclick = () => switchSlideTab('code');
+$('smPickFile').onclick = () => $('smFileInput').click();
+$('smFileInput').onchange = e => onSlideFilePicked(e.target.files[0]);
+
+$('smBtnReplace').onclick = () => {
+  const data = getSelectedSlideHtml();
+  if (!data) return;
+  replaceCurrentSlide(data.html, data.doc);
+  closeSlideModal();
+};
+
+$('smBtnAppend').onclick = () => {
+  const data = getSelectedSlideHtml();
+  if (!data) return;
+  addSlide(data.html);
+  closeSlideModal();
+};
+
 function startEdit(t) {
   if (t === doc.body || t === doc.documentElement) return;
   select(t);
@@ -1045,6 +1526,7 @@ function nudge(el, tx, ty) {  // 화면 갱신(upd)은 부른 쪽에서
 function onKey(e) {
   if (nav.building) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { if (!editing) { e.preventDefault(); doUndo(); } return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'm') { if (!editing && (slides.length || doc)) { e.preventDefault(); addSlide(); return; } }
   if (e.altKey && !editing && (nav.list.length || slides.length) && /^Arrow(Left|Right)$/.test(e.key)) { e.preventDefault(); e.stopPropagation(); return navStep(e.key === 'ArrowRight' ? 1 : -1); }
   const els = G();
   if (!els.length || editing) return;
@@ -1510,7 +1992,8 @@ function build() {
   if (Object.keys(kf).length) { const k = d.createElement('style'); k.setAttribute('data-editor', 'keyframes'); k.textContent = '\n' + kfCss() + '\n'; d.head.appendChild(k); }  // 같은 이름 @keyframes 중 마지막이 이긴다
   if (ov.length) { const sc = d.createElement('script'); sc.setAttribute('data-editor', 'overlay'); sc.textContent = '\n' + OVERLAY_JS.replace('__DATA__', () => JSON.stringify(ov).replace(/</g, '\\u003c')) + '\n'; d.body.appendChild(sc); }
   const dt = (src.match(/^\s*<!doctype[^>]*>/i) || [''])[0];
-  return { out: (dt + (dt ? '\n' : '') + d.documentElement.outerHTML).replace(/ data-hs-(on|off)=""/g, ''), ...info };
+  const finalOut = (dt + (dt ? '\n' : '') + d.documentElement.outerHTML).replace(/ data-hs-(on|off)=""/g, '').replace(/ data-hs-add="[^"]*"/g, '');
+  return { out: finalOut, ...info };
 }
 // 저장 결과를 알려 준다 (몇 개를 어떤 방식으로 저장했는지)
 function saveReport(r, verb) {
